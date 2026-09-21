@@ -5,10 +5,8 @@ const { Server } = require('socket.io');
 const io = new Server(http);
 const path = require('path');
 
-// סיסמת מנהל נסתרת
 const ADMIN_PASSWORD = "123";
 
-// הגדרת תיקייה ציבורית
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
@@ -21,33 +19,40 @@ let messages = [];
 io.on('connection', (socket) => {
     console.log('משתמש התחבר:', socket.id);
 
-    // התחברות לצ'אט עם כינוי
-    socket.on('join', (nickname) => {
+    // התחברות לצ'אט
+    socket.on('join', (data) => {
+        // תמיכה גם אם נשלח מחרוזת פשוטה וגם אובייקט
+        let nickname = typeof data === 'string' ? data : (data ? data.nickname : '');
+        let requestedAdmin = data && data.isAdmin;
+
         if (!nickname || typeof nickname !== 'string' || !nickname.trim()) return;
 
         socket.nickname = nickname.trim();
-        socket.role = socket.role || null;
+        if (requestedAdmin) {
+            socket.isAdmin = true;
+            socket.role = 'מנהל';
+        } else {
+            socket.role = socket.role || null;
+            socket.isAdmin = socket.isAdmin || false;
+        }
 
-        // בדיקה האם המשתמש כבר קיים ברשימה לפי ה-ID שלו
         const existingUserIndex = users.findIndex(u => u.id === socket.id);
         
         if (existingUserIndex !== -1) {
             users[existingUserIndex].nickname = socket.nickname;
+            users[existingUserIndex].role = socket.role;
+            users[existingUserIndex].isAdmin = socket.isAdmin;
         } else {
             users.push({
                 id: socket.id,
                 nickname: socket.nickname,
                 role: socket.role,
-                isAdmin: socket.isAdmin || false
+                isAdmin: socket.isAdmin
             });
         }
 
-        // שליחת היסטוריית הודעות למשתמש שנכנס (זה מה שמעביר את המסך לצ'אט!)
         socket.emit('load-messages', messages);
-
-        // עדכון רשימת המשתמשים לכולם
         updateUserList();
-        console.log(`משתמש התחבר בהצלחה בשם: ${socket.nickname}`);
     });
 
     // אימות מנהל
@@ -69,7 +74,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // שליחת הודעה חדשה
+    // שליחת הודעה
     socket.on('chat-message', (data) => {
         if (!data || !data.text || !data.text.trim()) return;
 
@@ -98,22 +103,27 @@ io.on('connection', (socket) => {
         }
     });
 
-    // שינוי כינוי תוך כדי תנועה
+    // שינוי כינוי מתוקן
     socket.on('change-nickname', (data) => {
         const oldName = socket.nickname;
-        socket.nickname = data.newNickname;
+        const newName = data && data.newNickname ? data.newNickname.trim() : '';
+        if (!newName) return;
+
+        socket.nickname = newName;
 
         const user = users.find(u => u.id === socket.id);
         if (user) {
-            user.nickname = data.newNickname;
+            user.nickname = newName;
         }
 
         const sysMsg = {
             id: Date.now().toString(),
-            text: `${oldName} שינה את שמו ל- ${data.newNickname}`,
+            text: `${oldName} שינה את שמו ל- ${newName}`,
             system: true
         };
         messages.push(sysMsg);
+        if (messages.length > 100) messages.shift();
+
         io.emit('new-message', sysMsg);
         updateUserList();
     });
@@ -128,12 +138,13 @@ io.on('connection', (socket) => {
             const targetSocket = io.sockets.sockets.get(data.targetId);
             if (targetSocket) {
                 targetSocket.role = data.role;
+                if (data.role === 'מנהל') targetSocket.isAdmin = true;
             }
             updateUserList();
         }
     });
 
-    // בעיטת משתמש ע"י מנהל
+    // בעיטת משתמש
     socket.on('kick-user', (targetId) => {
         if (!socket.isAdmin) return;
 
@@ -144,11 +155,9 @@ io.on('connection', (socket) => {
         }
     });
 
-    // התנתקות
     socket.on('disconnect', () => {
         users = users.filter(u => u.id !== socket.id);
         updateUserList();
-        console.log('משתמש התנתק:', socket.id);
     });
 });
 
@@ -158,5 +167,5 @@ function updateUserList() {
 
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
-    console.log(`השרת רץ אחי בכתובת: http://localhost:${PORT}`);
+    console.log(`השרת רץ בכתובת: http://localhost:${PORT}`);
 });
