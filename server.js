@@ -1,132 +1,161 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
+const express = require('http');
+const app = require('express')();
+const http = require('http').createServer(app);
+const io = require('socket.io')(http);
+const path = require('path');
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
+// הגדרת סיסמת המנהל הנסתרת (תוכל לשנות למה שתרצה)
+const ADMIN_PASSWORD = "123"; 
 
-app.use(express.static('public'));
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public/index.html'));
+});
 
-let users = {};
-let messages = [];
-let joinedNicknames = new Set();
-let currentAdminSocketId = null;
+let users = []; // רשימת המשתמשים המחוברים
+let messages = []; // היסטוריית הודעות (נשמרת בזיכרון השרת)
 
 io.on('connection', (socket) => {
-    console.log('משתמש התחבר:', socket.id);
+    console.log('משתמש התחבר, Socket ID:', socket.id);
 
-    socket.emit('load-messages', messages);
-
+    // הצטרפות לצ'אט עם כינוי
     socket.on('join', (nickname) => {
-        users[socket.id] = { id: socket.id, nickname: nickname, isAdmin: socket.id === currentAdminSocketId, role: null };
-        io.emit('update-users', Object.values(users));
+        socket.nickname = nickname;
+        socket.role = socket.role || null; // שמירת תפקיד קיים אם יש
         
-        if (!joinedNicknames.has(nickname)) {
-            joinedNicknames.add(nickname);
-            const joinMsg = {
-                id: 'sys_' + Math.random().toString(36).substr(2, 9),
-                system: true,
-                text: `${nickname} הצטרף/ה לשיחה.`
-            };
-            messages.push(joinMsg);
-            io.emit('message', joinMsg);
+        // בדיקה האם המשתמש כבר קיים ברשימה, אם כן מעדכנים ID
+        const existingUserIndex = users.findIndex(u => u.id === socket.id || u.nickname === nickname);
+        if (existingUserIndex !== -1) {
+            users[existingUserIndex].id = socket.id;
+        } else {
+            users.push({ id: socket.id, nickname: nickname, role: socket.role, isAdmin: socket.isAdmin || false });
         }
+
+        // שליחת היסטוריית הודעות למשתמש החדש
+        socket.emit('load-messages', messages);
+
+        // הודעת מערכת שקטה/רגילה על הצטרפות (אופציונלי, אפשר להסיר אם רוצים לגמרי דיסקרטי)
+        // const sysMsg = { id: Date.now().toString(), text: `${nickname} הצטרף/ה לצ'אט`, system: true };
+        // messages.push(sysMsg);
+        // io.emit('new-message', sysMsg);
+
+        updateUserList();
     });
 
+    // אימות סיסמת מנהל נסתרת
     socket.on('verify-admin', (password) => {
-        if (password === '2311') {
-            currentAdminSocketId = socket.id;
-            if (users[socket.id]) {
-                users[socket.id].isAdmin = true;
+        if (password === ADMIN_PASSWORD) {
+            socket.isAdmin = true;
+            socket.role = 'מנהל';
+            
+            // עדכון הסטטוס ברשימת המשתמשים
+            const user = users.find(u => u.id === socket.id);
+            if (user) {
+                user.isAdmin = true;
+                user.role = 'מנהל';
             }
-            io.emit('update-users', Object.values(users));
+
             socket.emit('admin-success', true);
+            updateUserList();
         } else {
             socket.emit('admin-success', false);
         }
     });
 
-    socket.on('change-nickname', (data) => {
-        if (users[socket.id]) {
-            const oldNickname = users[socket.id].nickname;
-            users[socket.id].nickname = data.newNickname;
-            joinedNicknames.add(data.newNickname);
-            io.emit('update-users', Object.values(users));
-
-            const nickMsg = {
-                id: 'sys_' + Math.random().toString(36).substr(2, 9),
-                system: true,
-                text: `${oldNickname} שינה/ה את כינויו ל-${data.newNickname}.`
-            };
-            messages.push(nickMsg);
-            io.emit('message', nickMsg);
-        }
-    });
-
+    // קבלת הודעת צ'אט חדשה
     socket.on('chat-message', (data) => {
-        const messageId = 'msg_' + Math.random().toString(36).substr(2, 9);
-        const newMessage = {
-            id: messageId,
-            socketId: socket.id,
+        const messageData = {
+            id: Date.now().toString(),
             nickname: data.nickname,
-            text: data.text
+            text: data.text,
+            role: socket.role,
+            system: false
         };
-        messages.push(newMessage);
-        io.emit('new-message', newMessage);
+        messages.push(messageData);
+        
+        // הגבלת היסטוריה ל-100 הודעות אחרונות כדי לא להעמיס
+        if (messages.length > 100) messages.shift();
+
+        io.emit('new-message', messageData);
     });
 
+    // עריכת הודעה קיימת
     socket.on('edit-message', (data) => {
         const msg = messages.find(m => m.id === data.id);
         if (msg) {
-            msg.text = data.newText;
-            io.emit('message-edited', { id: data.id, newText: data.newText });
-        }
-    });
-
-    socket.on('set-role', (data) => {
-        if (socket.id === currentAdminSocketId && users[data.targetId]) {
-            users[data.targetId].role = data.role;
-            io.emit('update-users', Object.values(users));
-        }
-    });
-
-    socket.on('kick-user', (targetId) => {
-        if (socket.id === currentAdminSocketId && users[targetId]) {
-            io.to(targetId).emit('kicked');
-            delete users[targetId];
-            io.emit('update-users', Object.values(users));
-        }
-    });
-
-    socket.on('leave-chat', () => {
-        if (users[socket.id]) {
-            if (socket.id === currentAdminSocketId) {
-                currentAdminSocketId = null;
+            // בדיקה האם המשתמש הוא שכתב את ההודעה או שהוא מנהל
+            if (msg.nickname === socket.nickname || socket.isAdmin) {
+                msg.text = data.newText;
+                io.emit('message-edited', { id: data.id, newText: data.newText });
             }
-            const nickname = users[socket.id].nickname;
-            joinedNicknames.delete(nickname);
-            delete users[socket.id];
-            io.emit('update-users', Object.values(users));
-            
-            const leaveMsg = {
-                id: 'sys_' + Math.random().toString(36).substr(2, 9),
-                system: true,
-                text: `${nickname} עזב/ה את השיחה.`
-            };
-            messages.push(leaveMsg);
-            io.emit('message', leaveMsg);
         }
+    });
+
+    // שינוי כינוי תוך כדי תנועה
+    socket.on('change-nickname', (data) => {
+        socket.nickname = data.newNickname;
+        const user = users.find(u => u.id === socket.id);
+        if (user) {
+            user.nickname = data.newNickname;
+        }
+
+        const sysMsg = {
+            id: Date.now().toString(),
+            text: `${data.oldNickname} שינה את שמו ל- ${data.newNickname}`,
+            system: true
+        };
+        messages.push(sysMsg);
+        io.emit('new-message', sysMsg);
+        updateUserList();
+    });
+
+    // הגדרת תפקיד למשתמש אחר (ע"י מנהל)
+    socket.on('set-role', (data) => {
+        if (!socket.isAdmin) return; // רק מנהל יכול
+
+        const targetUser = users.find(u => u.id === data.targetId);
+        if (targetUser) {
+            targetUser.role = data.role;
+            // עדכון גם מול ה-Socket הישיר אם מחובר
+            const targetSocket = io.sockets.sockets.get(data.targetId);
+            if (targetSocket) {
+                targetSocket.role = data.role;
+            }
+            updateUserList();
+        }
+    });
+
+    // הסרת משתמש (Kick) ע"י מנהל
+    socket.on('kick-user', (targetId) => {
+        if (!socket.isAdmin) return;
+
+        const targetSocket = io.sockets.sockets.get(targetId);
+        if (targetSocket) {
+            targetSocket.emit('kicked');
+            targetSocket.disconnect(true);
+        }
+    });
+
+    // עזיבת הצ'אט מרצון
+    socket.on('leave-chat', () => {
+        handleDisconnect(socket);
     });
 
     socket.on('disconnect', () => {
-        if (socket.id === currentAdminSocketId) {
-            currentAdminSocketId = null;
-        }
+        handleDisconnect(socket);
     });
 });
 
+function handleDisconnect(socket) {
+    users = users.filter(u => u.id !== socket.id);
+    updateUserList();
+    console.log('משתמש התנתק:', socket.id);
+}
+
+function updateUserList() {
+    io.emit('update-users', users);
+}
+
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`השרת רץ על פורט ${PORT}`);
+http.listen(PORT, () => {
+    console.log(`השרת רץ בהצלחה בכתובת: http://localhost:${PORT}`);
 });
