@@ -8,7 +8,7 @@ const path = require('path');
 // סיסמת מנהל נסתרת
 const ADMIN_PASSWORD = "123";
 
-// הגדרת תיקייה ציבורית אם יש
+// הגדרת תיקייה ציבורית
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {
@@ -23,15 +23,16 @@ io.on('connection', (socket) => {
 
     // התחברות לצ'אט עם כינוי
     socket.on('join', (nickname) => {
-        if (!nickname || !nickname.trim()) return;
+        if (!nickname || typeof nickname !== 'string' || !nickname.trim()) return;
 
         socket.nickname = nickname.trim();
         socket.role = socket.role || null;
 
-        // הוספה או עדכון ברשימת המשתמשים
-        const existingUser = users.find(u => u.id === socket.id);
-        if (existingUser) {
-            existingUser.nickname = socket.nickname;
+        // בדיקה האם המשתמש כבר קיים ברשימה לפי ה-ID שלו
+        const existingUserIndex = users.findIndex(u => u.id === socket.id);
+        
+        if (existingUserIndex !== -1) {
+            users[existingUserIndex].nickname = socket.nickname;
         } else {
             users.push({
                 id: socket.id,
@@ -41,11 +42,12 @@ io.on('connection', (socket) => {
             });
         }
 
-        // שליחת היסטוריית הודעות למשתמש שנכנס
+        // שליחת היסטוריית הודעות למשתמש שנכנס (זה מה שמעביר את המסך לצ'אט!)
         socket.emit('load-messages', messages);
 
         // עדכון רשימת המשתמשים לכולם
         updateUserList();
+        console.log(`משתמש התחבר בהצלחה בשם: ${socket.nickname}`);
     });
 
     // אימות מנהל
@@ -80,7 +82,7 @@ io.on('connection', (socket) => {
         };
 
         messages.push(messageData);
-        if (messages.length > 100) messages.shift(); // שמירת 100 הודעות אחרונות
+        if (messages.length > 100) messages.shift();
 
         io.emit('new-message', messageData);
     });
