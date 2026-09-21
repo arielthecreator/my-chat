@@ -9,47 +9,62 @@ const io = new Server(server);
 app.use(express.static('public'));
 
 let users = {};
+let messages = []; // שמירת היסטוריית ההודעות בשרת
 
 io.on('connection', (socket) => {
     console.log('משתמש התחבר:', socket.id);
 
+    // שליחת ההודעות הקודמות למשתמש החדש שמתחבר
+    socket.emit('load-messages', messages);
+
     socket.on('join', (nickname) => {
         users[socket.id] = { id: socket.id, nickname: nickname, role: null };
         io.emit('update-users', Object.values(users));
-        io.emit('message', {
+        
+        const joinMsg = {
+            id: 'sys_' + Math.random().toString(36).substr(2, 9),
             system: true,
             text: `${nickname} הצטרף/ה לשיחה.`
-        });
+        };
+        messages.push(joinMsg);
+        io.emit('message', joinMsg);
     });
 
-    socket.on('change-nickname', (newNickname) => {
+    socket.on('change-nickname', (data) => {
         if (users[socket.id]) {
             const oldNickname = users[socket.id].nickname;
-            users[socket.id].nickname = newNickname;
+            users[socket.id].nickname = data.newNickname;
             io.emit('update-users', Object.values(users));
-            io.emit('message', {
+
+            const nickMsg = {
+                id: 'sys_' + Math.random().toString(36).substr(2, 9),
                 system: true,
-                text: `${oldNickname} שינה/ה את כינויו ל-${newNickname}.`
-            });
+                text: `${oldNickname} שינה/ה את כינויו ל-${data.newNickname}.`
+            };
+            messages.push(nickMsg);
+            io.emit('message', nickMsg);
         }
     });
 
     socket.on('chat-message', (data) => {
         const messageId = 'msg_' + Math.random().toString(36).substr(2, 9);
-        io.emit('new-message', {
+        const newMessage = {
             id: messageId,
             socketId: socket.id,
             nickname: data.nickname,
             text: data.text
-        });
+        };
+        messages.push(newMessage);
+        io.emit('new-message', newMessage);
     });
 
+    // עריכת הודעה - רק אריאל יכול לערוך הודעות של כולם
     socket.on('edit-message', (data) => {
-        io.emit('message-edited', { id: data.id, newText: data.newText });
-    });
-
-    socket.on('delete-message', (messageId) => {
-        io.emit('message-deleted', messageId);
+        const msg = messages.find(m => m.id === data.id);
+        if (msg) {
+            msg.text = data.newText;
+            io.emit('message-edited', { id: data.id, newText: data.newText });
+        }
     });
 
     socket.on('set-role', (data) => {
@@ -67,16 +82,24 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('disconnect', () => {
+    socket.on('leave-chat', () => {
         if (users[socket.id]) {
             const nickname = users[socket.id].nickname;
             delete users[socket.id];
             io.emit('update-users', Object.values(users));
-            io.emit('message', {
+            
+            const leaveMsg = {
+                id: 'sys_' + Math.random().toString(36).substr(2, 9),
                 system: true,
                 text: `${nickname} עזב/ה את השיחה.`
-            });
+            };
+            messages.push(leaveMsg);
+            io.emit('message', leaveMsg);
         }
+    });
+
+    socket.on('disconnect', () => {
+        // שומרים את המשתמש מחובר בזיכרון גם אם התנתק לרגע, אלא אם עשה יציאה מסודרת
     });
 });
 
