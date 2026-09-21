@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>צ'אט קבוצתי</title>
+    <title>צ'אט קבוצתי מתקדם</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -23,6 +23,8 @@
             display: flex;
             flex-direction: column;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
         }
         @media (min-width: 601px) {
             .container {
@@ -30,7 +32,6 @@
                 border-radius: 10px;
             }
         }
-        /* מסך כניסה */
         #login-screen {
             display: flex;
             flex-direction: column;
@@ -58,7 +59,6 @@
             border-radius: 5px;
             cursor: pointer;
         }
-        /* מסך צ'אט */
         #chat-screen {
             display: none;
             flex-direction: column;
@@ -72,6 +72,13 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+        }
+        .menu-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
         }
         #chat-messages {
             flex: 1;
@@ -89,6 +96,7 @@
             max-width: 75%;
             box-shadow: 0 1px 2px rgba(0,0,0,0.1);
             word-break: break-word;
+            position: relative;
         }
         .message.system {
             background: #e4e6eb;
@@ -107,6 +115,37 @@
             margin-right: 5px;
             font-weight: bold;
         }
+        .msg-options {
+            position: absolute;
+            top: 5px;
+            left: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #888;
+        }
+        .msg-menu {
+            display: none;
+            position: absolute;
+            left: 10px;
+            top: 25px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 10;
+        }
+        .msg-menu button {
+            display: block;
+            background: none;
+            border: none;
+            padding: 5px 12px;
+            text-align: right;
+            width: 100%;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .msg-menu button:hover { background: #f0f2f5; }
+
         #chat-form {
             display: flex;
             padding: 10px;
@@ -129,36 +168,57 @@
             margin-right: 10px;
             cursor: pointer;
         }
-        /* פאנל ניהול למנהל בלבד */
-        #admin-panel {
-            background: #fff3e0;
-            padding: 10px;
-            border-bottom: 1px solid #ffe0b2;
-            display: none;
+        /* תפריט צד (סיידבר למנהל) */
+        #sidebar {
+            position: absolute;
+            top: 0;
+            right: -250px;
+            width: 250px;
+            height: 100%;
+            background: white;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.2);
+            transition: right 0.3s ease;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            box-sizing: border-box;
         }
-        #admin-panel h4 { margin: 0 0 5px 0; font-size: 14px; color: #e65100; }
-        .user-item {
+        #sidebar.open { right: 0; }
+        .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+        .user-mgmt-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
             font-size: 14px;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
+            background: #f9f9f9;
+            padding: 6px;
+            border-radius: 4px;
         }
-        .user-item button {
-            background: #e53935;
-            color: white;
-            border: none;
-            padding: 3px 8px;
-            border-radius: 3px;
+        .user-mgmt-btns button {
+            font-size: 11px;
+            padding: 3px 6px;
+            margin-right: 2px;
             cursor: pointer;
-            font-size: 12px;
+            border: none;
+            border-radius: 3px;
         }
+        .btn-admin { background: #4caf50; color: white; }
+        .btn-kick { background: #e53935; color: white; }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <!-- מסך כניסה מהיר -->
+        <!-- מסך כניסה -->
         <div id="login-screen">
             <h2>ברוכים הבאים לצ'אט</h2>
             <p>בחר כינוי כדי להיכנס מיד לשיחה:</p>
@@ -167,17 +227,21 @@
             <button id="login-btn">הכנס לצ'אט</button>
         </div>
 
-        <!-- מסך השיחה -->
+        <!-- מסך צ'אט -->
         <div id="chat-screen">
             <header>
-                <h3 id="room-title" style="margin:0;">צ'אט קבוצתי</h3>
-                <span id="user-display" style="font-size: 14px;"></span>
+                <button class="menu-btn" id="menu-toggle" style="display:none;">☰</button>
+                <h3 style="margin:0;">צ'אט קבוצתי</h3>
+                <span id="user-display" style="font-size: 13px;"></span>
             </header>
 
-            <!-- אזור ניהול חברי קבוצה (מופיע רק למנהל) -->
-            <div id="admin-panel">
-                <h4>ניהול משתמשים (פאנל מנהל):</h4>
-                <div id="users-list"></div>
+            <!-- פאנל ניהול צדדי (למנהל בלבד) -->
+            <div id="sidebar">
+                <div class="sidebar-header">
+                    <h4 style="margin:0;">ניהול משתמשים</h4>
+                    <button id="close-sidebar" style="background:none;border:none;font-size:18px;cursor:pointer;">✕</button>
+                </div>
+                <div id="users-mgmt-list" style="overflow-y:auto; flex:1;"></div>
             </div>
 
             <div id="chat-messages"></div>
@@ -189,7 +253,6 @@
         </div>
     </div>
 
-    <!-- טעינת סוקטים -->
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
@@ -202,11 +265,15 @@
         const chatInput = document.getElementById('chat-input');
         const chatMessages = document.getElementById('chat-messages');
         const userDisplay = document.getElementById('user-display');
-        const adminPanel = document.getElementById('admin-panel');
-        const usersList = document.getElementById('users-list');
+        
+        const menuToggle = document.getElementById('menu-toggle');
+        const sidebar = document.getElementById('sidebar');
+        const closeSidebar = document.getElementById('close-sidebar');
+        const usersMgmtList = document.getElementById('users-mgmt-list');
 
         let currentNickname = '';
-        const adminNames = ['אריאל', 'מנהל']; // שמות המנהלים שלך
+        const adminNames = ['אריאל', 'מנהל'];
+        let myAssignedRole = null; // 'מנהל' או 'מנהלת'
 
         loginBtn.addEventListener('click', startChat);
         nicknameInput.addEventListener('keypress', (e) => {
@@ -222,16 +289,17 @@
             currentNickname = nickname;
             loginScreen.style.display = 'none';
             chatScreen.style.display = 'flex';
-            
-            userDisplay.innerText = `מחובר כ: ${currentNickname}`;
-            
-            // בדיקה האם זה מנהל והצגת פאנל הניהול בהתאם
+            userDisplay.innerText = `م: ${currentNickname}`;
+
             if (adminNames.includes(currentNickname)) {
-                adminPanel.style.display = 'block';
+                menuToggle.style.display = 'block';
             }
 
             socket.emit('join', currentNickname);
         }
+
+        menuToggle.addEventListener('click', () => sidebar.classList.add('open'));
+        closeSidebar.addEventListener('click', () => sidebar.classList.remove('open'));
 
         chatForm.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -242,38 +310,116 @@
             }
         });
 
-        socket.on('message', (data) => {
+        // קבלת הודעה חדשה
+        socket.on('new-message', (data) => {
             const div = document.createElement('div');
-            if (data.system) {
-                div.className = 'message system';
-                div.innerText = data.text;
-            } else {
-                div.className = 'message';
-                let isManager = adminNames.includes(data.nickname);
-                let badgeHtml = isManager ? '<span class="badge">מנהל/ת</span>' : '';
-                div.innerHTML = `<strong>${badgeHtml}${data.nickname}:</strong> ${data.text}`;
-            }
+            div.className = 'message';
+            div.id = data.id;
+
+            let isManager = adminNames.includes(data.nickname) || data.role === 'מנהל' || data.role === 'מנהלת';
+            let roleText = data.role || (adminNames.includes(data.nickname) ? 'מנהל' : '');
+            let badgeHtml = roleText ? `<span class="badge">${roleText}</span>` : '';
+
+            let canEditOrDelete = (data.socketId === socket.id) || adminNames.includes(currentNickname);
+
+            div.innerHTML = `
+                ${canEditOrDelete ? '<span class="msg-options" onclick="toggleMsgMenu(this)">⋮</span>' : ''}
+                <div class="msg-menu">
+                    ${data.socketId === socket.id ? '<button onclick="editMsg(\'' + data.id + '\')">ערוך</button>' : ''}
+                    <button onclick="deleteMsg(\'' + data.id + '\')">מחק</button>
+                </div>
+                <strong>${badgeHtml}${data.nickname}:</strong> <span class="msg-text">${data.text}</span>
+            `;
             chatMessages.appendChild(div);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         });
 
-        // עדכון רשימת משתמשים (לניהול)
+        function toggleMsgMenu(el) {
+            const menu = el.nextElementSibling;
+            // סגירת שאר התפריטים הפתוחים
+            document.querySelectorAll('.msg-menu').forEach(m => { if(m !== menu) m.style.display = 'none'; });
+            menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function editMsg(id) {
+            const msgDiv = document.getElementById(id);
+            const textSpan = msgDiv.querySelector('.msg-text');
+            const newText = prompt('ערוך הודעה:', textSpan.innerText);
+            if (newText !== null && newText.trim() !== '') {
+                socket.emit('edit-message', { id: id, newText: newText.trim() });
+            }
+            msgDiv.querySelector('.msg-menu').style.display = 'none';
+        }
+
+        function deleteMsg(id) {
+            if (confirm('האם למחוק את ההודעה?')) {
+                socket.emit('delete-message', id);
+            }
+        }
+
+        socket.on('message-edited', (data) => {
+            const msgDiv = document.getElementById(data.id);
+            if (msgDiv) {
+                msgDiv.querySelector('.msg-text').innerText = data.newText;
+            }
+        });
+
+        socket.on('message-deleted', (id) => {
+            const msgDiv = document.getElementById(id);
+            if (msgDiv) msgDiv.remove();
+        });
+
+        socket.on('message', (data) => {
+            if (data.system) {
+                const div = document.createElement('div');
+                div.className = 'message system';
+                div.innerText = data.text;
+                chatMessages.appendChild(div);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        });
+
+        // ניהול משתמשים בסיידבר
         socket.on('update-users', (users) => {
             if (adminNames.includes(currentNickname)) {
-                usersList.innerHTML = '';
+                usersMgmtList.innerHTML = '';
                 users.forEach(user => {
                     if (user.nickname !== currentNickname) {
                         const item = document.createElement('div');
-                        item.className = 'user-item';
-                        item.innerHTML = `<span>${user.nickname}</span> <button onclick="kickUser('${user.id}')">הסר</button>`;
-                        usersList.appendChild(item);
+                        item.className = 'user-mgmt-item';
+                        let roleLabel = user.role ? `(${user.role})` : '';
+                        item.innerHTML = `
+                            <span>${user.nickname} ${roleLabel}</span>
+                            <div class="user-mgmt-btns">
+                                <button class="btn-admin" onclick="promptRole('${user.id}')">ניהול</button>
+                                <button class="btn-kick" onclick="kickUser('${user.id}')">הסר</button>
+                            </div>
+                        `;
+                        usersMgmtList.appendChild(item);
                     }
                 });
             }
         });
 
+        function promptRole(targetId) {
+            let choice = prompt('הקלד "מנהל" או "מנהלת" להוספה, או השאר ריק / כתוב "הסרה" כדי להסיר ניהול:');
+            if (choice !== null) {
+                let role = null;
+                if (choice.trim() === 'מנהל') role = 'מנהל';
+                else if (choice.trim() === 'מנהלת') role = 'מנהלת';
+                socket.emit('set-role', { targetId: targetId, role: role });
+            }
+        }
+
+        socket.on('role-updated', (data) => {
+            // אם המשתמש המעודכן הוא אני
+            // (אפשר להוסיף כאן לוגיקה אם תרצה)
+        });
+
         function kickUser(targetId) {
-            socket.emit('kick-user', targetId);
+            if (confirm('להסיר את המשתמש מהצ'אט?')) {
+                socket.emit('kick-user', targetId);
+            }
         }
 
         socket.on('kicked', () => {
