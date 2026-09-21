@@ -48,7 +48,6 @@ io.on('connection', (socket) => {
         io.emit('message-edited', { id: data.id, newText: data.newText });
     });
 
-    // מחיקת הודעה לכולם באופן מוודא
     socket.on('delete-message', (messageId) => {
         io.emit('message-deleted', messageId);
     });
