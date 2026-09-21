@@ -253,7 +253,7 @@
         <div id="chat-screen">
             <header>
                 <button class="menu-btn" id="menu-toggle">☰</button>
-                <h3 id="chat-title" title="לחץ 3 פעמים לכניסת מנהל">צ'אט קבוצתי</h3>
+                <h3 id="chat-title" title="לחץ פעמיים ברצף לכניסת מנהל">צ'אט קבוצתי</h3>
                 <div>
                     <span id="user-display" style="font-size: 13px;"></span>
                     <button class="edit-nick-btn" onclick="changeNickname()" title="שנה כינוי">✏️</button>
@@ -300,11 +300,10 @@
         const chatTitle = document.getElementById('chat-title');
 
         let currentNickname = localStorage.getItem('chat_nickname') || '';
-        let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
+        let isUserAdmin = localStorage.getItem('chat_is_admin'] === 'true';
 
         if (currentNickname) {
             nicknameInput.value = currentNickname;
-            startChatSession();
         }
 
         loginBtn.addEventListener('click', () => {
@@ -316,7 +315,6 @@
             currentNickname = nick;
             localStorage.setItem('chat_nickname', currentNickname);
             startChatSession();
-            socket.emit('join', currentNickname);
         });
 
         nicknameInput.addEventListener('keypress', (e) => {
@@ -327,29 +325,39 @@
             loginScreen.style.display = 'none';
             chatScreen.style.display = 'flex';
             userDisplay.innerText = `מחובר כ: ${currentNickname}`;
-            if (!currentNickname) return;
             socket.emit('join', currentNickname);
         }
 
-        // מנגנון לחיצה שלוש פעמים על הכותרת "צ'אט קבוצתי"
-        let clickCount = 0;
-        let clickTimer = null;
-
-        chatTitle.addEventListener('click', () => {
-            clickCount++;
-            if (clickTimer) clearTimeout(clickTimer);
-
-            if (clickCount === 3) {
-                clickCount = 0;
-                let password = prompt('הכנס סיסמת מנהל:');
-                if (password) {
-                    socket.emit('verify-admin', password);
-                }
-            } else {
-                clickTimer = setTimeout(() => {
-                    clickCount = 0;
-                }, 500); // חצי שנייה לאפס את רצף הלחיצות אם לא לחץ מהר מספיק
+        // שליחת הודעה בצורה תקינה
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = chatInput.value.trim();
+            if (text !== '') {
+                socket.emit('chat-message', { nickname: currentNickname, text: text });
+                chatInput.value = '';
             }
+        });
+
+        // פתיחת תפריט צד
+        menuToggle.addEventListener('click', () => {
+            sidebar.classList.toggle('open');
+        });
+        closeSidebar.addEventListener('click', () => {
+            sidebar.classList.remove('open');
+        });
+
+        // מנגנון לחיצה כפולה נקייה על הכותרת "צ'אט קבוצתי" לפתיחת חלון הסיסמה
+        let lastClickTime = 0;
+        chatTitle.addEventListener('click', () => {
+            let currentTime = new Date().getTime();
+            if (currentTime - lastClickTime < 400) {
+                // לחיצה כפולה זוהתה!
+                let password = prompt('הכנס סיסמת מנהל:');
+                if (password !== null) {
+                    socket.emit('verify-admin', password.trim());
+                }
+            }
+            lastClickTime = currentTime;
         });
 
         socket.on('admin-success', (success) => {
@@ -357,8 +365,7 @@
                 isUserAdmin = true;
                 localStorage.setItem('chat_is_admin', 'true');
                 alert('התחברת בהצלחה כמנהל!');
-                // רענון תצוגת התפריט מיד
-                socket.emit('join', currentNickname);
+                socket.emit('join', currentNickname); // רענון מצב בשרת
             } else {
                 alert('סיסמה שגויה!');
             }
@@ -385,14 +392,12 @@
             div.id = data.id;
 
             let badgeHtml = data.role ? `<span class="badge">${data.role}</span>` : '';
-
-            // משתמש רגיל עורך רק את שלו. מנהל מאומת עורך הכל.
             let canEdit = (data.nickname === currentNickname) || isUserAdmin;
 
             div.innerHTML = `
                 ${canEdit ? '<span class="msg-options" onclick="toggleMsgMenu(this)">⋮</span>' : ''}
                 <div class="msg-menu">
-                    <button onclick="editMsg(\'' + data.id + '\')">ערוך הודעה</button>
+                    <button onclick="editMsg('${data.id}')">ערוך הודעה</button>
                 </div>
                 <strong>${badgeHtml}${data.nickname}:</strong> <span class="msg-text">${data.text}</span>
             `;
@@ -438,7 +443,6 @@
         });
 
         socket.on('update-users', (users) => {
-            // בדיקה האם אני מנהל מתוך רשימת המשתמשים שהשרת מעדכן
             const me = users.find(u => u.id === socket.id);
             if (me && me.isAdmin) {
                 isUserAdmin = true;
@@ -465,7 +469,6 @@
                 });
             } else {
                 sidebarTitle.innerText = "תפריט קבוצה";
-                sidebarContent.sidebarContent = '';
                 sidebarContent.innerHTML = '<p style="font-size: 14px; color: #666; text-align: center; margin-top: 20px;">ברוך הבא לצ\'אט הקבוצתי!</p>';
             }
         });
