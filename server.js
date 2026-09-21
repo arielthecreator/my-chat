@@ -10,6 +10,8 @@ app.use(express.static('public'));
 
 let users = {};
 let messages = [];
+let joinedNicknames = new Set();
+let currentAdminSocketId = null; // שומר את המזהה של המנהל המחובר כרגע
 
 io.on('connection', (socket) => {
     console.log('משתמש התחבר:', socket.id);
@@ -17,22 +19,45 @@ io.on('connection', (socket) => {
     socket.emit('load-messages', messages);
 
     socket.on('join', (nickname) => {
-        users[socket.id] = { id: socket.id, nickname: nickname, role: null };
+        // ברירת מחדל: אף אחד הוא לא מנהל בכניסה הרגילה
+        users[socket.id] = { id: socket.id, nickname: nickname, isAdmin: false, role: null };
         io.emit('update-users', Object.values(users));
         
-        const joinMsg = {
-            id: 'sys_' + Math.random().toString(36).substr(2, 9),
-            system: true,
-            text: `${nickname} הצטרף/ה לשיחה.`
-        };
-        messages.push(joinMsg);
-        io.emit('message', joinMsg);
+        if (!joinedNicknames.has(nickname)) {
+            joinedNicknames.add(nickname);
+            const joinMsg = {
+                id: 'sys_' + Math.random().toString(36).substr(2, 9),
+                system: true,
+                text: `${nickname} הצטרף/ה לשיחה.`
+            };
+            messages.push(joinMsg);
+            io.emit('message', joinMsg);
+        }
+    });
+
+    // בקשת הפיכה למנהל באמצעות הסיסמה
+    socket.on('verify-admin', (password) => {
+        if (password === '2311') {
+            // אם כבר יש מנהל מחובר, אפשר לאפס או לתת למי שהקליד עכשיו
+            currentAdminSocketId = socket.id;
+            
+            // עדכון המשתמש כמנהל
+            if (users[socket.id]) {
+                users[socket.id].isAdmin = true;
+            }
+            
+            io.emit('update-users', Object.values(users));
+            socket.emit('admin-success', true);
+        } else {
+            socket.emit('admin-success', false);
+        }
     });
 
     socket.on('change-nickname', (data) => {
         if (users[socket.id]) {
             const oldNickname = users[socket.id].nickname;
             users[socket.id].nickname = data.newNickname;
+            joinedNicknames.add(data.newNickname);
             io.emit('update-users', Object.values(users));
 
             const nickMsg = {
@@ -66,14 +91,14 @@ io.on('connection', (socket) => {
     });
 
     socket.on('set-role', (data) => {
-        if (users[data.targetId]) {
+        if (socket.id === currentAdminSocketId && users[data.targetId]) {
             users[data.targetId].role = data.role;
             io.emit('update-users', Object.values(users));
         }
     });
 
     socket.on('kick-user', (targetId) => {
-        if (users[targetId]) {
+        if (socket.id === currentAdminSocketId && users[targetId]) {
             io.to(targetId).emit('kicked');
             delete users[targetId];
             io.emit('update-users', Object.values(users));
@@ -82,7 +107,11 @@ io.on('connection', (socket) => {
 
     socket.on('leave-chat', () => {
         if (users[socket.id]) {
+            if (socket.id === currentAdminSocketId) {
+                currentAdminSocketId = null;
+            }
             const nickname = users[socket.id].nickname;
+            joinedNicknames.delete(nickname);
             delete users[socket.id];
             io.emit('update-users', Object.values(users));
             
@@ -96,7 +125,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('disconnect', () => {});
+    socket.on('disconnect', () => {
+        if (socket.id === currentAdminSocketId) {
+            currentAdminSocketId = null;
+        }
+    });
 });
 
 const PORT = process.env.PORT || 3000;
