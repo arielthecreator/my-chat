@@ -212,6 +212,13 @@
         }
         .btn-admin { background: #4caf50; color: white; }
         .btn-kick { background: #e53935; color: white; }
+        .edit-nick-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 5px;
+        }
     </style>
 </head>
 <body>
@@ -231,10 +238,13 @@
             <header>
                 <button class="menu-btn" id="menu-toggle" style="display:none;">☰</button>
                 <h3 style="margin:0;">צ'אט קבוצתי</h3>
-                <span id="user-display" style="font-size: 13px;"></span>
+                <div>
+                    <span id="user-display" style="font-size: 13px;"></span>
+                    <button class="edit-nick-btn" onclick="changeNickname()" title="שנה כינוי">✏️</button>
+                </div>
             </header>
 
-            <!-- פאנל ניהול צדדי (למנהל בלבד) -->
+            <!-- פאנל ניהול צדדי -->
             <div id="sidebar">
                 <div class="sidebar-header">
                     <h4 style="margin:0;">ניהול משתמשים</h4>
@@ -287,13 +297,33 @@
             currentNickname = nickname;
             loginScreen.style.display = 'none';
             chatScreen.style.display = 'flex';
-            userDisplay.innerText = `מחובר כ: ${currentNickname}`;
+            userDisplay.innerText = `مחובר כ: ${currentNickname}`;
 
             if (adminNames.includes(currentNickname)) {
                 menuToggle.style.display = 'block';
+            } else {
+                menuToggle.style.display = 'none';
             }
 
             socket.emit('join', currentNickname);
+        }
+
+        // שינוי כינוי דרך כפתור העיפרון
+        function changeNickname() {
+            const newNick = prompt('הכנס כינוי חדש:', currentNickname);
+            if (newNick && newNick.trim() !== '' && newNick.trim() !== currentNickname) {
+                currentNickname = newNick.trim();
+                userDisplay.innerText = `מחובר כ: ${currentNickname}`;
+                
+                if (adminNames.includes(currentNickname)) {
+                    menuToggle.style.display = 'block';
+                } else {
+                    menuToggle.style.display = 'none';
+                    sidebar.classList.remove('open');
+                }
+
+                socket.emit('change-nickname', currentNickname);
+            }
         }
 
         menuToggle.addEventListener('click', () => sidebar.classList.add('open'));
@@ -348,7 +378,7 @@
         }
 
         function deleteMsg(id) {
-            if (confirm('האם למחוק את ההודעה?')) {
+            if (confirm('האם למחוק את ההודעה לכולם?')) {
                 socket.emit('delete-message', id);
             }
         }
@@ -360,9 +390,12 @@
             }
         });
 
+        // מחיקת הודעה אצל כולם
         socket.on('message-deleted', (id) => {
             const msgDiv = document.getElementById(id);
-            if (msgDiv) msgDiv.remove();
+            if (msgDiv) {
+                msgDiv.remove();
+            }
         });
 
         socket.on('message', (data) => {
@@ -405,8 +438,6 @@
                 socket.emit('set-role', { targetId: targetId, role: role });
             }
         }
-
-        socket.on('role-updated', (data) => {});
 
         function kickUser(targetId) {
             if (confirm('להסיר את המשתמש מהצ\'אט?')) {
