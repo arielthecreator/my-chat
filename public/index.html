@@ -3,73 +3,283 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>צ'אט אנונימי</title>
+    <title>צ'אט קבוצתי</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 15px; display: flex; flex-direction: column; height: 92vh; box-sizing: border-box; }
-        h2 { text-align: center; margin-bottom: 10px; font-size: 1.4rem; color: #38bdf8; }
-        #chat-container { flex: 1; overflow-y: auto; border: 1px solid #334155; padding: 12px; margin-bottom: 12px; border-radius: 12px; background: #1e293b; display: flex; flex-direction: column; gap: 8px; }
-        .message { padding: 10px; border-radius: 8px; background: #334155; word-break: break-word; font-size: 0.95rem; }
-        .admin-tag { background: #ef4444; color: white; padding: 2px 6px; font-size: 0.75em; border-radius: 4px; margin-right: 6px; font-weight: bold; }
-        #input-box { display: flex; gap: 8px; }
-        input, button { padding: 12px; font-size: 1rem; border-radius: 8px; border: none; outline: none; }
-        input { background: #1e293b; color: white; border: 1px solid #475569; }
-        #username { width: 110px; }
-        #message-input { flex: 1; }
-        button { background: #0ea5e9; color: white; cursor: pointer; font-weight: bold; padding: 0 20px; }
-        button:active { background: #0284c7; }
-        .time { font-size: 0.7em; color: #94a3b8; margin-right: 5px; }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 600px;
+            height: 100%;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        @media (min-width: 601px) {
+            .container {
+                height: 90vh;
+                border-radius: 10px;
+            }
+        }
+        /* מסך כניסה */
+        #login-screen {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            flex: 1;
+            padding: 20px;
+            text-align: center;
+        }
+        #login-screen input {
+            padding: 12px;
+            font-size: 16px;
+            width: 80%;
+            max-width: 300px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #login-screen button {
+            padding: 12px 25px;
+            font-size: 16px;
+            background-color: #0084ff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        /* מסך צ'אט */
+        #chat-screen {
+            display: none;
+            flex-direction: column;
+            flex: 1;
+            height: 100%;
+        }
+        header {
+            background-color: #0084ff;
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #chat-messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background-color: #f7f9fa;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .message {
+            background: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            max-width: 75%;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            word-break: break-word;
+        }
+        .message.system {
+            background: #e4e6eb;
+            color: #65676b;
+            align-self: center;
+            font-size: 13px;
+            text-align: center;
+            max-width: 100%;
+        }
+        .badge {
+            background: #ff9800;
+            color: white;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-right: 5px;
+            font-weight: bold;
+        }
+        #chat-form {
+            display: flex;
+            padding: 10px;
+            background: white;
+            border-top: 1px solid #ddd;
+        }
+        #chat-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 15px;
+        }
+        #chat-form button {
+            padding: 10px 20px;
+            background-color: #0084ff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        /* פאנל ניהול למנהל בלבד */
+        #admin-panel {
+            background: #fff3e0;
+            padding: 10px;
+            border-bottom: 1px solid #ffe0b2;
+            display: none;
+        }
+        #admin-panel h4 { margin: 0 0 5px 0; font-size: 14px; color: #e65100; }
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        .user-item button {
+            background: #e53935;
+            color: white;
+            border: none;
+            padding: 3px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
 
-    <h2>צ'אט אנונימי קבוצתי</h2>
-    <div id="chat-container"></div>
+    <div class="container">
+        <!-- מסך כניסה מהיר -->
+        <div id="login-screen">
+            <h2>ברוכים הבאים לצ'אט</h2>
+            <p>בחר כינוי כדי להיכנס מיד לשיחה:</p>
+            <input type="text" id="nickname-input" placeholder="הכנס כינוי כאן...">
+            <br>
+            <button id="login-btn">הכנס לצ'אט</button>
+        </div>
 
-    <div id="input-box">
-        <input type="text" id="username" placeholder="הכנס כינוי...">
-        <input type="text" id="message-input" placeholder="כתוב הודעה...">
-        <button onclick="sendMessage()">שלח</button>
+        <!-- מסך השיחה -->
+        <div id="chat-screen">
+            <header>
+                <h3 id="room-title" style="margin:0;">צ'אט קבוצתי</h3>
+                <span id="user-display" style="font-size: 14px;"></span>
+            </header>
+
+            <!-- אזור ניהול חברי קבוצה (מופיע רק למנהל) -->
+            <div id="admin-panel">
+                <h4>ניהול משתמשים (פאנל מנהל):</h4>
+                <div id="users-list"></div>
+            </div>
+
+            <div id="chat-messages"></div>
+
+            <form id="chat-form">
+                <input type="text" id="chat-input" placeholder="כתוב הודעה..." autocomplete="off">
+                <button type="submit">שלח</button>
+            </form>
+        </div>
     </div>
 
+    <!-- טעינת סוקטים -->
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        const chatContainer = document.getElementById('chat-container');
-        const messageInput = document.getElementById('message-input');
-        const usernameInput = document.getElementById('username');
 
-        socket.on('load_history', (history) => {
-            chatContainer.innerHTML = '';
-            history.forEach(appendMessage);
+        const loginScreen = document.getElementById('login-screen');
+        const chatScreen = document.getElementById('chat-screen');
+        const nicknameInput = document.getElementById('nickname-input');
+        const loginBtn = document.getElementById('login-btn');
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const chatMessages = document.getElementById('chat-messages');
+        const userDisplay = document.getElementById('user-display');
+        const adminPanel = document.getElementById('admin-panel');
+        const usersList = document.getElementById('users-list');
+
+        let currentNickname = '';
+        const adminNames = ['אריאל', 'מנהל']; // שמות המנהלים שלך
+
+        loginBtn.addEventListener('click', startChat);
+        nicknameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') startChat();
         });
 
-        socket.on('receive_message', (data) => {
-            appendMessage(data);
-        });
-
-        function sendMessage() {
-            const username = usernameInput.value.trim();
-            const text = messageInput.value.trim();
-
-            if (!username || !text) {
-                alert('חובה להזין כינוי ותוכן הודעה!');
+        function startChat() {
+            const nickname = nicknameInput.value.trim();
+            if (!nickname) {
+                alert('אנא הכנס כינוי תקין');
                 return;
             }
+            currentNickname = nickname;
+            loginScreen.style.display = 'none';
+            chatScreen.style.display = 'flex';
+            
+            userDisplay.innerText = `מחובר כ: ${currentNickname}`;
+            
+            // בדיקה האם זה מנהל והצגת פאנל הניהול בהתאם
+            if (adminNames.includes(currentNickname)) {
+                adminPanel.style.display = 'block';
+            }
 
-            socket.emit('send_message', { username, text });
-            messageInput.value = '';
+            socket.emit('join', currentNickname);
         }
 
-        function appendMessage(data) {
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = chatInput.value.trim();
+            if (text) {
+                socket.emit('chat-message', { nickname: currentNickname, text: text });
+                chatInput.value = '';
+            }
+        });
+
+        socket.on('message', (data) => {
             const div = document.createElement('div');
-            div.className = 'message';
-            
-            let adminBadge = data.isAdmin ? '<span class="admin-tag">מנהל</span>' : '';
-            div.innerHTML = `<strong>${data.username}</strong> ${adminBadge} <span class="time">(${data.time})</span><br>${data.text}`;
-            
-            chatContainer.appendChild(div);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
+            if (data.system) {
+                div.className = 'message system';
+                div.innerText = data.text;
+            } else {
+                div.className = 'message';
+                let isManager = adminNames.includes(data.nickname);
+                let badgeHtml = isManager ? '<span class="badge">מנהל/ת</span>' : '';
+                div.innerHTML = `<strong>${badgeHtml}${data.nickname}:</strong> ${data.text}`;
+            }
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        });
+
+        // עדכון רשימת משתמשים (לניהול)
+        socket.on('update-users', (users) => {
+            if (adminNames.includes(currentNickname)) {
+                usersList.innerHTML = '';
+                users.forEach(user => {
+                    if (user.nickname !== currentNickname) {
+                        const item = document.createElement('div');
+                        item.className = 'user-item';
+                        item.innerHTML = `<span>${user.nickname}</span> <button onclick="kickUser('${user.id}')">הסר</button>`;
+                        usersList.appendChild(item);
+                    }
+                });
+            }
+        });
+
+        function kickUser(targetId) {
+            socket.emit('kick-user', targetId);
         }
+
+        socket.on('kicked', () => {
+            alert('הוסרת מהקבוצה על ידי המנהל.');
+            window.location.reload();
+        });
     </script>
 </body>
 </html>
