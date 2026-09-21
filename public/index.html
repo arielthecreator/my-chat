@@ -297,7 +297,7 @@
             currentNickname = nickname;
             loginScreen.style.display = 'none';
             chatScreen.style.display = 'flex';
-            userDisplay.innerText = `مחובר כ: ${currentNickname}`;
+            userDisplay.innerText = `מחובר כ: ${currentNickname}`;
 
             if (adminNames.includes(currentNickname)) {
                 menuToggle.style.display = 'block';
@@ -308,7 +308,6 @@
             socket.emit('join', currentNickname);
         }
 
-        // שינוי כינוי דרך כפתור העיפרון
         function changeNickname() {
             const newNick = prompt('הכנס כינוי חדש:', currentNickname);
             if (newNick && newNick.trim() !== '' && newNick.trim() !== currentNickname) {
@@ -343,7 +342,6 @@
             div.className = 'message';
             div.id = data.id;
 
-            let isManager = adminNames.includes(data.nickname) || data.role === 'מנהל' || data.role === 'מנהלת';
             let roleText = data.role || (adminNames.includes(data.nickname) ? 'מנהל' : '');
             let badgeHtml = roleText ? `<span class="badge">${roleText}</span>` : '';
 
@@ -390,7 +388,7 @@
             }
         });
 
-        // מחיקת הודעה אצל כולם
+        // מחיקת הודעה אמיתית אצל כולם מהמסך
         socket.on('message-deleted', (id) => {
             const msgDiv = document.getElementById(id);
             if (msgDiv) {
