@@ -219,6 +219,17 @@
             font-size: 14px;
             margin-right: 5px;
         }
+        .leave-btn {
+            background-color: #e53935;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: auto;
+            text-align: center;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -236,7 +247,7 @@
         <!-- מסך צ'אט -->
         <div id="chat-screen">
             <header>
-                <button class="menu-btn" id="menu-toggle" style="display:none;">☰</button>
+                <button class="menu-btn" id="menu-toggle">☰</button>
                 <h3 style="margin:0;">צ'אט קבוצתי</h3>
                 <div>
                     <span id="user-display" style="font-size: 13px;"></span>
@@ -244,13 +255,14 @@
                 </div>
             </header>
 
-            <!-- פאנל ניהול צדדי -->
+            <!-- פאנל צדדי (תפריט) -->
             <div id="sidebar">
                 <div class="sidebar-header">
-                    <h4 style="margin:0;">ניהול משתמשים</h4>
+                    <h4 style="margin:0;" id="sidebar-title">תפריט</h4>
                     <button id="close-sidebar" style="background:none;border:none;font-size:18px;cursor:pointer;">✕</button>
                 </div>
-                <div id="users-mgmt-list" style="overflow-y:auto; flex:1;"></div>
+                <div id="sidebar-content" style="overflow-y:auto; flex:1;"></div>
+                <button class="leave-btn" onclick="leaveChat()">עזוב קבוצה</button>
             </div>
 
             <div id="chat-messages"></div>
@@ -278,50 +290,47 @@
         const menuToggle = document.getElementById('menu-toggle');
         const sidebar = document.getElementById('sidebar');
         const closeSidebar = document.getElementById('close-sidebar');
-        const usersMgmtList = document.getElementById('users-mgmt-list');
+        const sidebarContent = document.getElementById('sidebar-content');
+        const sidebarTitle = document.getElementById('sidebar-title');
 
-        let currentNickname = '';
-        const adminNames = ['אריאל', 'מנהל'];
+        let currentNickname = localStorage.getItem('chat_nickname') || '';
+        const adminName = 'אריאל';
 
-        loginBtn.addEventListener('click', startChat);
-        nicknameInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') startChat();
-        });
+        if (currentNickname) {
+            nicknameInput.value = currentNickname;
+            startChatSession();
+        }
 
-        function startChat() {
-            const nickname = nicknameInput.value.trim();
-            if (!nickname) {
+        loginBtn.addEventListener('click', () => {
+            const nick = nicknameInput.value.trim();
+            if (!nick) {
                 alert('אנא הכנס כינוי תקין');
                 return;
             }
-            currentNickname = nickname;
+            currentNickname = nick;
+            localStorage.setItem('chat_nickname', currentNickname);
+            startChatSession();
+        });
+
+        nicknameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loginBtn.click();
+        });
+
+        function startChatSession() {
             loginScreen.style.display = 'none';
             chatScreen.style.display = 'flex';
             userDisplay.innerText = `מחובר כ: ${currentNickname}`;
-
-            if (adminNames.includes(currentNickname)) {
-                menuToggle.style.display = 'block';
-            } else {
-                menuToggle.style.display = 'none';
-            }
-
             socket.emit('join', currentNickname);
         }
 
         function changeNickname() {
             const newNick = prompt('הכנס כינוי חדש:', currentNickname);
             if (newNick && newNick.trim() !== '' && newNick.trim() !== currentNickname) {
+                const oldNick = currentNickname;
                 currentNickname = newNick.trim();
+                localStorage.setItem('chat_nickname', currentNickname);
                 userDisplay.innerText = `מחובר כ: ${currentNickname}`;
-                
-                if (adminNames.includes(currentNickname)) {
-                    menuToggle.style.display = 'block';
-                } else {
-                    menuToggle.style.display = 'none';
-                    sidebar.classList.remove('open');
-                }
-
-                socket.emit('change-nickname', currentNickname);
+                socket.emit('change-nickname', { oldNickname: oldNick, newNickname: currentNickname });
             }
         }
 
@@ -337,27 +346,50 @@
             }
         });
 
+        socket.on('load-messages', (msgs) => {
+            chatMessages.innerHTML = '';
+            msgs.forEach(data => {
+                if (data.system) {
+                    appendSystemMessage(data.text);
+                } else {
+                    appendChatMessage(data);
+                }
+            });
+        });
+
         socket.on('new-message', (data) => {
+            appendChatMessage(data);
+        });
+
+        function appendChatMessage(data) {
             const div = document.createElement('div');
             div.className = 'message';
             div.id = data.id;
 
-            let roleText = data.role || (adminNames.includes(data.nickname) ? 'מנהל' : '');
+            let roleText = (data.nickname === adminName) ? 'מנהל ראשי' : (data.role || '');
             let badgeHtml = roleText ? `<span class="badge">${roleText}</span>` : '';
 
-            let canEditOrDelete = (data.socketId === socket.id) || adminNames.includes(currentNickname);
+            // משתמש רגיל יכול לערוך רק את ההודעה של עצמו. אריאל יכול לערוך את כולם.
+            let canEdit = (data.nickname === currentNickname) || (currentNickname === adminName);
 
             div.innerHTML = `
-                ${canEditOrDelete ? '<span class="msg-options" onclick="toggleMsgMenu(this)">⋮</span>' : ''}
+                ${canEdit ? '<span class="msg-options" onclick="toggleMsgMenu(this)">⋮</span>' : ''}
                 <div class="msg-menu">
-                    ${data.socketId === socket.id ? '<button onclick="editMsg(\'' + data.id + '\')">ערוך</button>' : ''}
-                    <button onclick="deleteMsg(\'' + data.id + '\')">מחק</button>
+                    <button onclick="editMsg(\'' + data.id + '\')">ערוך הודעה</button>
                 </div>
                 <strong>${badgeHtml}${data.nickname}:</strong> <span class="msg-text">${data.text}</span>
             `;
             chatMessages.appendChild(div);
             chatMessages.scrollTop = chatMessages.scrollHeight;
-        });
+        }
+
+        function appendSystemMessage(text) {
+            const div = document.createElement('div');
+            div.className = 'message system';
+            div.innerText = text;
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
 
         function toggleMsgMenu(el) {
             const menu = el.nextElementSibling;
@@ -375,12 +407,6 @@
             msgDiv.querySelector('.msg-menu').style.display = 'none';
         }
 
-        function deleteMsg(id) {
-            if (confirm('האם למחוק את ההודעה לכולם?')) {
-                socket.emit('delete-message', id);
-            }
-        }
-
         socket.on('message-edited', (data) => {
             const msgDiv = document.getElementById(data.id);
             if (msgDiv) {
@@ -388,27 +414,16 @@
             }
         });
 
-        // מחיקת הודעה אמיתית אצל כולם מהמסך
-        socket.on('message-deleted', (id) => {
-            const msgDiv = document.getElementById(id);
-            if (msgDiv) {
-                msgDiv.remove();
-            }
-        });
-
         socket.on('message', (data) => {
             if (data.system) {
-                const div = document.createElement('div');
-                div.className = 'message system';
-                div.innerText = data.text;
-                chatMessages.appendChild(div);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
+                appendSystemMessage(data.text);
             }
         });
 
         socket.on('update-users', (users) => {
-            if (adminNames.includes(currentNickname)) {
-                usersMgmtList.innerHTML = '';
+            if (currentNickname === adminName) {
+                sidebarTitle.innerText = "ניהול משתמשים";
+                sidebarContent.innerHTML = '';
                 users.forEach(user => {
                     if (user.nickname !== currentNickname) {
                         const item = document.createElement('div');
@@ -417,22 +432,23 @@
                         item.innerHTML = `
                             <span>${user.nickname} ${roleLabel}</span>
                             <div class="user-mgmt-btns">
-                                <button class="btn-admin" onclick="promptRole('${user.id}')">ניהול</button>
+                                <button class="btn-admin" onclick="promptRole('${user.id}')">הגדר מנהל</button>
                                 <button class="btn-kick" onclick="kickUser('${user.id}')">הסר</button>
                             </div>
                         `;
-                        usersMgmtList.appendChild(item);
+                        sidebarContent.appendChild(item);
                     }
                 });
+            } else {
+                sidebarTitle.innerText = "תפריט קבוצה";
+                sidebarContent.innerHTML = '<p style="font-size: 14px; color: #666; text-align: center; margin-top: 20px;">ברוך הבא לצ\'אט הקבוצתי!</p>';
             }
         });
 
         function promptRole(targetId) {
-            let choice = prompt('הקלד "מנהל" או "מנהלת" להוספה, או השאר ריק / כתוב "הסרה" כדי להסיר ניהול:');
+            let choice = prompt('הקלד "מנהל" כדי להוסיף תפקיד, או השאר ריק / כתוב "הסרה" כדי להסיר:');
             if (choice !== null) {
-                let role = null;
-                if (choice.trim() === 'מנהל') role = 'מנהל';
-                else if (choice.trim() === 'מנהלת') role = 'מנהלת';
+                let role = choice.trim() === 'מנהל' ? 'מנהל' : null;
                 socket.emit('set-role', { targetId: targetId, role: role });
             }
         }
@@ -443,8 +459,17 @@
             }
         }
 
+        function leaveChat() {
+            if (confirm('האם אתה בטוח שברצונך לעזוב את הקבוצה?')) {
+                socket.emit('leave-chat');
+                localStorage.removeItem('chat_nickname');
+                window.location.reload();
+            }
+        }
+
         socket.on('kicked', () => {
             alert('הוסרת מהקבוצה על ידי המנהל.');
+            localStorage.removeItem('chat_nickname');
             window.location.reload();
         });
     </script>
