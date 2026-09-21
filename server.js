@@ -11,7 +11,7 @@ app.use(express.static('public'));
 let users = {};
 let messages = [];
 let joinedNicknames = new Set();
-let currentAdminSocketId = null; // שומר את המזהה של המנהל המחובר כרגע
+let currentAdminSocketId = null;
 
 io.on('connection', (socket) => {
     console.log('משתמש התחבר:', socket.id);
@@ -19,8 +19,7 @@ io.on('connection', (socket) => {
     socket.emit('load-messages', messages);
 
     socket.on('join', (nickname) => {
-        // ברירת מחדל: אף אחד הוא לא מנהל בכניסה הרגילה
-        users[socket.id] = { id: socket.id, nickname: nickname, isAdmin: false, role: null };
+        users[socket.id] = { id: socket.id, nickname: nickname, isAdmin: socket.id === currentAdminSocketId, role: null };
         io.emit('update-users', Object.values(users));
         
         if (!joinedNicknames.has(nickname)) {
@@ -35,17 +34,12 @@ io.on('connection', (socket) => {
         }
     });
 
-    // בקשת הפיכה למנהל באמצעות הסיסמה
     socket.on('verify-admin', (password) => {
         if (password === '2311') {
-            // אם כבר יש מנהל מחובר, אפשר לאפס או לתת למי שהקליד עכשיו
             currentAdminSocketId = socket.id;
-            
-            // עדכון המשתמש כמנהל
             if (users[socket.id]) {
                 users[socket.id].isAdmin = true;
             }
-            
             io.emit('update-users', Object.values(users));
             socket.emit('admin-success', true);
         } else {
