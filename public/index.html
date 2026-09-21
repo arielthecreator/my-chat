@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>צ'אט אנונימי</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 15px; display: flex; flex-direction: column; height: 92vh; box-sizing: border-box; }
+        h2 { text-align: center; margin-bottom: 10px; font-size: 1.4rem; color: #38bdf8; }
+        #chat-container { flex: 1; overflow-y: auto; border: 1px solid #334155; padding: 12px; margin-bottom: 12px; border-radius: 12px; background: #1e293b; display: flex; flex-direction: column; gap: 8px; }
+        .message { padding: 10px; border-radius: 8px; background: #334155; word-break: break-word; font-size: 0.95rem; }
+        .admin-tag { background: #ef4444; color: white; padding: 2px 6px; font-size: 0.75em; border-radius: 4px; margin-right: 6px; font-weight: bold; }
+        #input-box { display: flex; gap: 8px; }
+        input, button { padding: 12px; font-size: 1rem; border-radius: 8px; border: none; outline: none; }
+        input { background: #1e293b; color: white; border: 1px solid #475569; }
+        #username { width: 110px; }
+        #message-input { flex: 1; }
+        button { background: #0ea5e9; color: white; cursor: pointer; font-weight: bold; padding: 0 20px; }
+        button:active { background: #0284c7; }
+        .time { font-size: 0.7em; color: #94a3b8; margin-right: 5px; }
+    </style>
+</head>
+<body>
+
+    <h2>צ'אט אנונימי קבוצתי</h2>
+    <div id="chat-container"></div>
+
+    <div id="input-box">
+        <input type="text" id="username" placeholder="הכנס כינוי...">
+        <input type="text" id="message-input" placeholder="כתוב הודעה...">
+        <button onclick="sendMessage()">שלח</button>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const chatContainer = document.getElementById('chat-container');
+        const messageInput = document.getElementById('message-input');
+        const usernameInput = document.getElementById('username');
+
+        socket.on('load_history', (history) => {
+            chatContainer.innerHTML = '';
+            history.forEach(appendMessage);
+        });
+
+        socket.on('receive_message', (data) => {
+            appendMessage(data);
+        });
+
+        function sendMessage() {
+            const username = usernameInput.value.trim();
+            const text = messageInput.value.trim();
+
+            if (!username || !text) {
+                alert('חובה להזין כינוי ותוכן הודעה!');
+                return;
+            }
+
+            socket.emit('send_message', { username, text });
+            messageInput.value = '';
+        }
+
+        function appendMessage(data) {
+            const div = document.createElement('div');
+            div.className = 'message';
+            
+            let adminBadge = data.isAdmin ? '<span class="admin-tag">מנהל</span>' : '';
+            div.innerHTML = `<strong>${data.username}</strong> ${adminBadge} <span class="time">(${data.time})</span><br>${data.text}`;
+            
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+    </script>
+</body>
+</html>
