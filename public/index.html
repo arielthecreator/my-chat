@@ -253,7 +253,7 @@
         <div id="chat-screen">
             <header>
                 <button class="menu-btn" id="menu-toggle">☰</button>
-                <h3 id="chat-title" title="לחץ פעמיים ברצף לכניסת מנהל">צ'אט קבוצתי</h3>
+                <h3 id="chat-title">צ'אט קבוצתי</h3>
                 <div>
                     <span id="user-display" style="font-size: 13px;"></span>
                     <button class="edit-nick-btn" onclick="changeNickname()" title="שנה כינוי">✏️</button>
@@ -301,6 +301,7 @@
 
         let currentNickname = localStorage.getItem('chat_nickname') || '';
         let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
+        let globalAdminAlreadyUsed = false; // משתנה שבודק האם הסיסמה כבר הוקלדה אי פעם בצ'אט
 
         if (currentNickname) {
             nicknameInput.value = currentNickname;
@@ -346,12 +347,18 @@
             sidebar.classList.remove('open');
         });
 
-        // מנגנון לחיצה כפולה נקייה על הכותרת "צ'אט קבוצתי" לפתיחת חלון הסיסמה
+        // קבלת הסטטוס מהשרת האם סיסמת המנהל כבר הוקלדה בעבר
+        socket.on('admin-status', (used) => {
+            globalAdminAlreadyUsed = used;
+        });
+
+        // מנגנון לחיצה כפולה - יפעל רק אם הסיסמה עדיין לא הוקלדה מעולם על ידי אף אחד
         let lastClickTime = 0;
         chatTitle.addEventListener('click', () => {
+            if (globalAdminAlreadyUsed) return; // אם כבר הזינו פעם אחת סיסמה, מבטל לגמרי את האפשרות לכולם!
+
             let currentTime = new Date().getTime();
             if (currentTime - lastClickTime < 400) {
-                // לחיצה כפולה זוהתה!
                 let password = prompt('הכנס סיסמת מנהל:');
                 if (password !== null) {
                     socket.emit('verify-admin', password.trim());
