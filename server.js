@@ -22,33 +22,42 @@ io.on('connection', (socket) => {
         });
     });
 
+    // עדכון כינוי קיים
+    socket.on('change-nickname', (newNickname) => {
+        if (users[socket.id]) {
+            const oldNickname = users[socket.id].nickname;
+            users[socket.id].nickname = newNickname;
+            io.emit('update-users', Object.values(users));
+            io.emit('message', {
+                system: true,
+                text: `${oldNickname} שינה/ה את כינויו ל-${newNickname}.`
+            });
+        }
+    });
+
     socket.on('chat-message', (data) => {
         const messageId = 'msg_' + Math.random().toString(36).substr(2, 9);
         io.emit('new-message', {
             id: messageId,
             socketId: socket.id,
             nickname: data.nickname,
-            text: data.text,
-            edited: false
+            text: data.text
         });
     });
 
-    // עריכת הודעה
     socket.on('edit-message', (data) => {
         io.emit('message-edited', { id: data.id, newText: data.newText });
     });
 
-    // מחיקת הודעה (ע"י הכותב או המנהל)
+    // מחיקת הודעה לכולם
     socket.on('delete-message', (messageId) => {
         io.emit('message-deleted', messageId);
     });
 
-    // שינוי תפקיד משתמש (מנהל / מנהלת / הסרה)
     socket.on('set-role', (data) => {
         if (users[data.targetId]) {
-            users[data.targetId].role = data.role; // 'מנהל' או 'מנהלת' או null
+            users[data.targetId].role = data.role;
             io.emit('update-users', Object.values(users));
-            io.emit('role-updated', { id: data.targetId, role: data.role });
         }
     });
 
