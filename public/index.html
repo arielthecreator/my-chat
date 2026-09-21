@@ -302,10 +302,12 @@
         let currentNickname = localStorage.getItem('chat_nickname') || '';
         let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
 
+        // אם יש כבר כינוי שמור, שמים אותו באינפוט
         if (currentNickname) {
             nicknameInput.value = currentNickname;
         }
 
+        // לחיצה על כפתור כניסה
         loginBtn.addEventListener('click', () => {
             const nick = nicknameInput.value.trim();
             if (!nick) {
@@ -314,6 +316,9 @@
             }
             currentNickname = nick;
             localStorage.setItem('chat_nickname', currentNickname);
+            
+            // שולחים לשרת ומעבירים מסך מיד
+            socket.emit('join', currentNickname);
             startChatSession();
         });
 
@@ -325,10 +330,9 @@
             loginScreen.style.display = 'none';
             chatScreen.style.display = 'flex';
             userDisplay.innerText = `מחובר כ: ${currentNickname}`;
-            socket.emit('join', currentNickname);
         }
 
-        // שליחת הודעה בצורה תקינה
+        // שליחת הודעה
         chatForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const text = chatInput.value.trim();
@@ -346,10 +350,10 @@
             sidebar.classList.remove('open');
         });
 
-        // מנגנון לחיצה כפולה - אם המשתמש כבר מנהל במכשיר שלו, הלחיצה מנוטרלת אצלו לחלוטין בצורה סודית
+        // לחיצה כפולה על הכותרת (סיסמת מנהל נסתרת)
         let lastClickTime = 0;
         chatTitle.addEventListener('click', () => {
-            if (isUserAdmin) return; // מי שכבר מנהל, הלחיצה הכפולה לא עושה כלום אצלו
+            if (isUserAdmin) return; // מנהל קיים לא צריך להקליד שוב
 
             let currentTime = new Date().getTime();
             if (currentTime - lastClickTime < 400) {
@@ -366,12 +370,13 @@
                 isUserAdmin = true;
                 localStorage.setItem('chat_is_admin', 'true');
                 alert('התחברת בהצלחה כמנהל!');
-                socket.emit('join', currentNickname); // רענון מצב מול השרת בשקט
+                socket.emit('join', currentNickname);
             } else {
                 alert('סיסמה שגויה!');
             }
         });
 
+        // טעינת היסטוריית הודעות (וגם מוודא כניסה חלקה)
         socket.on('load-messages', (msgs) => {
             chatMessages.innerHTML = '';
             msgs.forEach(data => {
@@ -437,12 +442,6 @@
             }
         });
 
-        socket.on('message', (data) => {
-            if (data.system) {
-                appendSystemMessage(data.text);
-            }
-        });
-
         socket.on('update-users', (users) => {
             const me = users.find(u => u.id === socket.id);
             if (me && me.isAdmin) {
@@ -459,7 +458,7 @@
                         item.className = 'user-mgmt-item';
                         let roleLabel = user.role ? `(${user.role})` : '';
                         item.innerHTML = `
-                            <span>${user.nickname}${roleLabel}</span>
+                            <span>${user.nickname} ${roleLabel}</span>
                             <div class="user-mgmt-btns">
                                 <button class="btn-admin" onclick="promptRole('${user.id}')">הגדר מנהל</button>
                                 <button class="btn-kick" onclick="kickUser('${user.id}')">הסר</button>
@@ -475,7 +474,7 @@
         });
 
         function promptRole(targetId) {
-            let choice = prompt('הקלד "מנהל" כדי להוסיף תפקיד, או השאר ריק / כתוב "הסרה" כדי להסיר:`);
+            let choice = prompt('הקלד "מנהל" כדי להוסיף תפקיד, או השאר ריק / כתוב "הסרה" כדי להסיר:');
             if (choice !== null) {
                 let role = choice.trim() === 'מנהל' ? 'מנהל' : null;
                 socket.emit('set-role', { targetId: targetId, role: role });
