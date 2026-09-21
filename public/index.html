@@ -260,7 +260,7 @@
                 </div>
             </header>
 
-            <!-- פאנל צדדי (תפריט) -->
+            <!-- פאנל צדדי -->
             <div id="sidebar">
                 <div class="sidebar-header">
                     <h4 style="margin:0;" id="sidebar-title">תפריט</h4>
@@ -302,12 +302,10 @@
         let currentNickname = localStorage.getItem('chat_nickname') || '';
         let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
 
-        // אם יש כבר כינוי שמור, שמים אותו באינפוט
         if (currentNickname) {
             nicknameInput.value = currentNickname;
         }
 
-        // לחיצה על כפתור כניסה
         loginBtn.addEventListener('click', () => {
             const nick = nicknameInput.value.trim();
             if (!nick) {
@@ -317,8 +315,7 @@
             currentNickname = nick;
             localStorage.setItem('chat_nickname', currentNickname);
             
-            // שולחים לשרת ומעבירים מסך מיד
-            socket.emit('join', currentNickname);
+            socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
             startChatSession();
         });
 
@@ -332,7 +329,6 @@
             userDisplay.innerText = `מחובר כ: ${currentNickname}`;
         }
 
-        // שליחת הודעה
         chatForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const text = chatInput.value.trim();
@@ -342,7 +338,6 @@
             }
         });
 
-        // פתיחת תפריט צד
         menuToggle.addEventListener('click', () => {
             sidebar.classList.toggle('open');
         });
@@ -350,10 +345,10 @@
             sidebar.classList.remove('open');
         });
 
-        // לחיצה כפולה על הכותרת (סיסמת מנהל נסתרת)
+        // קליק כפול על הכותרת להכנסת סיסמת מנהל
         let lastClickTime = 0;
         chatTitle.addEventListener('click', () => {
-            if (isUserAdmin) return; // מנהל קיים לא צריך להקליד שוב
+            if (isUserAdmin) return;
 
             let currentTime = new Date().getTime();
             if (currentTime - lastClickTime < 400) {
@@ -370,13 +365,13 @@
                 isUserAdmin = true;
                 localStorage.setItem('chat_is_admin', 'true');
                 alert('התחברת בהצלחה כמנהל!');
-                socket.emit('join', currentNickname);
+                // שליחת הצטרפות מחדש עם דגל מנהל מעודכן לשרת
+                socket.emit('join', { nickname: currentNickname, isAdmin: true });
             } else {
                 alert('סיסמה שגויה!');
             }
         });
 
-        // טעינת היסטוריית הודעות (וגם מוודא כניסה חלקה)
         socket.on('load-messages', (msgs) => {
             chatMessages.innerHTML = '';
             msgs.forEach(data => {
@@ -494,13 +489,12 @@
                 currentNickname = newNick.trim();
                 localStorage.setItem('chat_nickname', currentNickname);
                 userDisplay.innerText = `מחובר כ: ${currentNickname}`;
-                socket.emit('change-nickname', { oldNickname: oldNick, newNickname: currentNickname });
+                socket.emit('change-nickname', { newNickname: currentNickname });
             }
         }
 
         function leaveChat() {
             if (confirm('האם אתה בטוח שברצונך לעזוב את הקבוצה?')) {
-                socket.emit('leave-chat');
                 localStorage.removeItem('chat_nickname');
                 localStorage.removeItem('chat_is_admin');
                 window.location.reload();
