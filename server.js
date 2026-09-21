@@ -8,33 +8,60 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-// רשימת המנהלים שלך - תוכל לשנות או להוסיף שמות משתמש שיהיו מנהלים
-const admins = ['אריאל', 'מנהל']; 
-
-// היסטוריית הודעות שנשמרת בזמן ריצת השרת
-let messages = [];
+// רשימת משתמשים מחוברים
+let users = {};
 
 io.on('connection', (socket) => {
-    socket.emit('load_history', messages);
+    console.log('משתמש התחבר:', socket.id);
 
-    socket.on('send_message', (data) => {
-        const { username, text } = data;
-        const isAdmin = admins.includes(username);
+    // הצטרפות לצ'אט עם כינוי
+    socket.on('join', (nickname) => {
+        users[socket.id] = { id: socket.id, nickname: nickname };
+        
+        // עדכון כל המשתמשים ברשימת החברים
+        io.emit('update-users', Object.values(users));
+        
+        // הודעת מערכת על הצטרפות
+        io.emit('message', {
+            system: true,
+            text: `${nickname} הצטרף/ה לשיחה.`
+        });
+    });
 
-        const messageData = {
-            id: Date.now(),
-            username: username,
-            text: text,
-            isAdmin: isAdmin,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
+    // קבלת הודעה ושליחתה לכולם
+    socket.on('chat-message', (data) => {
+        io.emit('message', {
+            nickname: data.nickname,
+            text: data.text,
+            id: socket.id
+        });
+    });
 
-        messages.push(messageData);
-        io.emit('receive_message', messageData);
+    // פעולות מנהל: הסרת משתמש
+    socket.on('kick-user', (targetId) => {
+        if (users[targetId]) {
+            io.to(targetId).emit('kicked');
+            delete users[targetId];
+            io.emit('update-users', Object.values(users));
+        }
+    });
+
+    // ניתוק משתמש
+    socket.on('disconnect', () => {
+        if (users[socket.id]) {
+            const nickname = users[socket.id].nickname;
+            delete users[socket.id];
+            io.emit('update-users', Object.values(users));
+            io.emit('message', {
+                system: true,
+                text: `${nickname} עזב/ה את השיחה.`
+            });
+        }
+        console.log('משתמש התנתק:', socket.id);
     });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`השרת רץ באוויר על פורט ${PORT}`);
 });
