@@ -168,7 +168,6 @@
             margin-right: 10px;
             cursor: pointer;
         }
-        /* תפריט צד (סיידבר למנהל) */
         #sidebar {
             position: absolute;
             top: 0;
@@ -273,7 +272,6 @@
 
         let currentNickname = '';
         const adminNames = ['אריאל', 'מנהל'];
-        let myAssignedRole = null; // 'מנהל' או 'מנהלת'
 
         loginBtn.addEventListener('click', startChat);
         nicknameInput.addEventListener('keypress', (e) => {
@@ -289,7 +287,7 @@
             currentNickname = nickname;
             loginScreen.style.display = 'none';
             chatScreen.style.display = 'flex';
-            userDisplay.innerText = `م: ${currentNickname}`;
+            userDisplay.innerText = `מחובר כ: ${currentNickname}`;
 
             if (adminNames.includes(currentNickname)) {
                 menuToggle.style.display = 'block';
@@ -310,7 +308,6 @@
             }
         });
 
-        // קבלת הודעה חדשה
         socket.on('new-message', (data) => {
             const div = document.createElement('div');
             div.className = 'message';
@@ -336,7 +333,6 @@
 
         function toggleMsgMenu(el) {
             const menu = el.nextElementSibling;
-            // סגירת שאר התפריטים הפתוחים
             document.querySelectorAll('.msg-menu').forEach(m => { if(m !== menu) m.style.display = 'none'; });
             menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
         }
@@ -379,7 +375,6 @@
             }
         });
 
-        // ניהול משתמשים בסיידבר
         socket.on('update-users', (users) => {
             if (adminNames.includes(currentNickname)) {
                 usersMgmtList.innerHTML = '';
@@ -411,13 +406,10 @@
             }
         }
 
-        socket.on('role-updated', (data) => {
-            // אם המשתמש המעודכן הוא אני
-            // (אפשר להוסיף כאן לוגיקה אם תרצה)
-        });
+        socket.on('role-updated', (data) => {});
 
         function kickUser(targetId) {
-            if (confirm('להסיר את המשתמש מהצ'אט?')) {
+            if (confirm('להסיר את המשתמש מהצ\'אט?')) {
                 socket.emit('kick-user', targetId);
             }
         }
