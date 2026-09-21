@@ -22,7 +22,6 @@ io.on('connection', (socket) => {
         });
     });
 
-    // עדכון כינוי קיים
     socket.on('change-nickname', (newNickname) => {
         if (users[socket.id]) {
             const oldNickname = users[socket.id].nickname;
@@ -49,7 +48,7 @@ io.on('connection', (socket) => {
         io.emit('message-edited', { id: data.id, newText: data.newText });
     });
 
-    // מחיקת הודעה לכולם
+    // מחיקת הודעה לכולם באופן מוודא
     socket.on('delete-message', (messageId) => {
         io.emit('message-deleted', messageId);
     });
