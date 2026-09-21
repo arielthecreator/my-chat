@@ -9,12 +9,11 @@ const io = new Server(server);
 app.use(express.static('public'));
 
 let users = {};
-let messages = []; // שמירת היסטוריית ההודעות בשרת
+let messages = [];
 
 io.on('connection', (socket) => {
     console.log('משתמש התחבר:', socket.id);
 
-    // שליחת ההודעות הקודמות למשתמש החדש שמתחבר
     socket.emit('load-messages', messages);
 
     socket.on('join', (nickname) => {
@@ -58,7 +57,6 @@ io.on('connection', (socket) => {
         io.emit('new-message', newMessage);
     });
 
-    // עריכת הודעה - רק אריאל יכול לערוך הודעות של כולם
     socket.on('edit-message', (data) => {
         const msg = messages.find(m => m.id === data.id);
         if (msg) {
@@ -98,9 +96,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('disconnect', () => {
-        // שומרים את המשתמש מחובר בזיכרון גם אם התנתק לרגע, אלא אם עשה יציאה מסודרת
-    });
+    socket.on('disconnect', () => {});
 });
 
 const PORT = process.env.PORT || 3000;
