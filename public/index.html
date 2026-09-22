@@ -207,6 +207,19 @@
             padding: 6px;
             border-radius: 4px;
         }
+        .user-info-area {
+            display: flex;
+            flex-direction: column;
+        }
+        .online-status {
+            font-size: 11px;
+            color: #4caf50;
+            font-weight: bold;
+        }
+        .offline-status {
+            font-size: 11px;
+            color: #999;
+        }
         .user-mgmt-btns button {
             font-size: 11px;
             padding: 3px 6px;
@@ -227,6 +240,7 @@
             margin-bottom: 8px;
             font-weight: bold;
             font-size: 13px;
+            width: 100%;
         }
         .edit-nick-btn {
             background: none;
@@ -313,7 +327,6 @@
         let currentNickname = localStorage.getItem('chat_nickname') || '';
         let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
 
-        // כניסה אוטומטית אם המשתמש כבר היה מחובר (מונע איפוס בטעינה מחדש/משיכה למעלה)
         if (currentNickname) {
             nicknameInput.value = currentNickname;
             startChatSession();
@@ -359,7 +372,6 @@
             sidebar.classList.remove('open');
         });
 
-        // קליק כפול על הכותרת להכנסת סיסמת מנהל
         let lastClickTime = 0;
         chatTitle.addEventListener('click', () => {
             if (isUserAdmin) return;
@@ -400,7 +412,6 @@
             appendChatMessage(data);
         });
 
-        // איפוס מלא של הודעות הצ'אט לכולם
         function clearAllMessages() {
             if (confirm('האם אתה בטוח שברצונך לנקות את כל הודעות הצ\'אט?')) {
                 socket.emit('clear-chat');
@@ -409,7 +420,7 @@
 
         socket.on('chat-cleared', () => {
             chatMessages.innerHTML = '';
-            alert('הצ\'אט ננוקה בהצלחה.');
+            alert('הצ\'אט נוקה בהצלחה.');
         });
 
         function appendChatMessage(data) {
@@ -462,8 +473,11 @@
             }
         });
 
-        socket.on('update-users', (users) => {
-            const me = users.find(u => u.id === socket.id);
+        socket.on('update-users', (data) => {
+            const activeUsers = data.activeUsers;
+            const allUsers = data.allUsers;
+
+            const me = activeUsers.find(u => u.id === socket.id);
             if (me && me.isAdmin) {
                 isUserAdmin = true;
                 localStorage.setItem('chat_is_admin', 'true');
@@ -473,16 +487,23 @@
                 sidebarTitle.innerText = "ניהול משתמשים";
                 sidebarContent.innerHTML = '<button class="clear-chat-btn" onclick="clearAllMessages()">🧹 נקה את כל הצ\'אט</button>';
                 
-                users.forEach(user => {
-                    if (user.id !== socket.id) {
+                allUsers.forEach(user => {
+                    if (user.nickname !== currentNickname) {
                         const item = document.createElement('div');
                         item.className = 'user-mgmt-item';
                         let roleLabel = user.role ? `(${user.role})` : '';
+                        let statusHtml = user.online 
+                            ? `<span class="online-status">מחובר</span>` 
+                            : `<span class="offline-status">לא מחובר</span>`;
+
                         item.innerHTML = `
-                            <span>${user.nickname} ${roleLabel}</span>
+                            <div class="user-info-area">
+                                <span>${user.nickname} ${roleLabel}</span>
+                                ${statusHtml}
+                            </div>
                             <div class="user-mgmt-btns">
                                 <button class="btn-admin" onclick="promptRole('${user.id}')">הגדר מנהל</button>
-                                <button class="btn-kick" onclick="kickUser('${user.id}')">הסר</button>
+                                ${user.online ? `<button class="btn-kick" onclick="kickUser('${user.id}')">הסר</button>` : ''}
                             </div>
                         `;
                         sidebarContent.appendChild(item);
