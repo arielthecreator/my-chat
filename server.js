@@ -1,224 +1,153 @@
 const express = require('express');
-const app = express();
-const http = require('http').createServer(app);
+const http = require('http');
 const { Server } = require('socket.io');
-const io = new Server(http);
-const path = require('path');
 
-const ADMIN_PASSWORD = "123";
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static('public'));
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public/index.html'));
-});
-
-let users = [];
-let allRegisteredUsers = [];
 let messages = [];
+let users = []; 
+let activeUsers = []; 
+const ADMIN_PASSWORD = "123"; 
 
 io.on('connection', (socket) => {
     console.log('משתמש התחבר:', socket.id);
 
     socket.on('join', (data) => {
-        let nickname = typeof data === 'string' ? data : (data ? data.nickname : '');
-        let requestedAdmin = data && data.isAdmin;
-        let requestedOwner = data && data.isOwner;
+        const nickname = data.nickname;
+        const isAdmin = data.isAdmin || false;
 
-        if (!nickname || typeof nickname !== 'string' || !nickname.trim()) return;
-
-        socket.nickname = nickname.trim();
+        let existingUser = users.find(u => u.id === socket.id || u.nickname === nickname);
         
-        if (requestedOwner) {
-            socket.isOwner = true;
-            socket.isAdmin = true;
-            socket.role = 'בעלים';
-        } else if (requestedAdmin) {
-            socket.isAdmin = true;
-            socket.role = 'מנהל';
-        } else {
-            socket.role = socket.role || null;
-            socket.isAdmin = socket.isAdmin || false;
-            socket.isOwner = false;
+        let userRole = null;
+        if (existingUser) {
+            userRole = existingUser.role;
+        }
+        if (isAdmin) {
+            userRole = 'מנהל';
         }
 
-        const existingUserIndex = users.findIndex(u => u.id === socket.id);
-        if (existingUserIndex !== -1) {
-            users[existingUserIndex].nickname = socket.nickname;
-            users[existingUserIndex].role = socket.role;
-            users[existingUserIndex].isAdmin = socket.isAdmin;
-            users[existingUserIndex].isOwner = socket.isOwner;
-        } else {
-            users.push({
-                id: socket.id,
-                nickname: socket.nickname,
-                role: socket.role,
-                isAdmin: socket.isAdmin,
-                isOwner: socket.isOwner
-            });
-        }
-
-        const regIndex = allRegisteredUsers.findIndex(u => u.nickname === socket.nickname);
-        if (regIndex !== -1) {
-            allRegisteredUsers[regIndex].online = true;
-            allRegisteredUsers[regIndex].id = socket.id;
-            if (socket.isOwner) allRegisteredUsers[regIndex].isOwner = true;
-        } else {
-            allRegisteredUsers.push({
-                id: socket.id,
-                nickname: socket.nickname,
-                role: socket.role,
-                isAdmin: socket.isAdmin,
-                isOwner: socket.isOwner,
-                online: true
-            });
-        }
+        users = users.filter(u => u.nickname !== nickname && u.id !== socket.id);
+        
+        const userData = {
+            id: socket.id,
+            nickname: nickname,
+            role: userRole,
+            online: true
+        };
+        
+        users.push(userData);
+        activeUsers.push(userData);
 
         socket.emit('load-messages', messages);
-        updateUserList();
-    });
+        updateAllUsersList();
 
-    socket.on('verify-admin', (password) => {
-        if (password === ADMIN_PASSWORD) {
-            socket.isAdmin = true;
-            socket.isOwner = true; // מי שנכנס עם הסיסמה הראשית הוא הבעלים
-            socket.role = 'בעלים';
-
-            const user = users.find(u => u.id === socket.id);
-            if (user) {
-                user.isAdmin = true;
-                user.isOwner = true;
-                user.role = 'בעלים';
-            }
-            const regUser = allRegisteredUsers.find(u => u.nickname === socket.nickname);
-            if (regUser) {
-                regUser.isAdmin = true;
-                regUser.isOwner = true;
-                regUser.role = 'בעלים';
-            }
-
-            socket.emit('admin-success', { success: true, isOwner: true });
-            updateUserList();
-        } else {
-            socket.emit('admin-success', { success: false });
-        }
+        io.emit('system-message', { text: `${nickname} הצטרף לצ'אט`, system: true });
     });
 
     socket.on('chat-message', (data) => {
-        if (!data || !data.text || !data.text.trim()) return;
-
-        const messageData = {
-            id: Date.now().toString(),
-            nickname: data.nickname || socket.nickname || 'אורח',
-            text: data.text.trim(),
-            role: socket.role,
-            system: false
+        const timeNow = new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+        
+        const messageObj = {
+            id: 'msg_' + Date.now() + Math.random(),
+            nickname: data.nickname,
+            text: data.text,
+            time: timeNow,
+            role: users.find(u => u.nickname === data.nickname)?.role || null,
+            readBy: [data.nickname] // מי כבר קרא את ההודעה
         };
 
-        messages.push(messageData);
-        if (messages.length > 100) messages.shift();
+        messages.push(messageObj);
+        if (messages.length > 100) messages.shift(); // שומר עד 100 הודעות אחרונות
 
-        io.emit('new-message', messageData);
+        io.emit('new-message', messageObj);
+    });
+
+    // סימון הודעות כנקראו על ידי משתמש שנמצא בצ'אט
+    socket.on('mark-as-read', (nickname) => {
+        let updated = false;
+        messages.forEach(msg => {
+            if (!msg.readBy.includes(nickname)) {
+                msg.readBy.push(nickname);
+                updated = true;
+            }
+        });
+        if (updated) {
+            io.emit('update-messages-status', messages);
+        }
     });
 
     socket.on('edit-message', (data) => {
         const msg = messages.find(m => m.id === data.id);
         if (msg) {
-            if (msg.nickname === socket.nickname || socket.isAdmin) {
-                msg.text = data.newText;
-                io.emit('message-edited', { id: data.id, newText: data.newText });
-            }
+            msg.newText = data.newText;
+            msg.text = data.newText; // עדכון הטקסט
+            io.emit('message-edited', { id: data.id, newText: data.newText });
         }
     });
 
     socket.on('clear-chat', () => {
-        if (!socket.isAdmin) return;
         messages = [];
         io.emit('chat-cleared');
     });
 
-    socket.on('change-nickname', (data) => {
-        const oldName = socket.nickname;
-        const newName = data && data.newNickname ? data.newNickname.trim() : '';
-        if (!newName) return;
-
-        socket.nickname = newName;
-        const user = users.find(u => u.id === socket.id);
-        if (user) user.nickname = newName;
-
-        const regUser = allRegisteredUsers.find(u => u.nickname === oldName);
-        if (regUser) {
-            regUser.nickname = newName;
+    socket.on('verify-admin', (password) => {
+        if (password === ADMIN_PASSWORD) {
+            socket.emit('admin-success', true);
+        } else {
+            socket.emit('admin-success', false);
         }
-
-        const sysMsg = {
-            id: Date.now().toString(),
-            text: `${oldName} שינה את שמו ל- ${newName}`,
-            system: true
-        };
-        messages.push(sysMsg);
-        if (messages.length > 100) messages.shift();
-
-        io.emit('new-message', sysMsg);
-        updateUserList();
     });
 
     socket.on('set-role', (data) => {
-        if (!socket.isAdmin) return;
-
-        // רק הבעלים יכול להסיר ניהול ממנהל אחר
-        if (data.role === null && !socket.isOwner) {
-            return; // מנהל רגיל לא יכול להוריד ניהול
+        const target = users.find(u => u.id === data.targetId);
+        if (target) {
+            target.role = data.role;
+            updateAllUsersList();
         }
-
-        const targetUser = users.find(u => u.id === data.targetId);
-        if (targetUser) {
-            targetUser.role = data.role;
-            targetUser.isAdmin = (data.role === 'מנהל');
-            
-            const targetSocket = io.sockets.sockets.get(data.targetId);
-            if (targetSocket) {
-                targetSocket.role = data.role;
-                targetSocket.isAdmin = (data.role === 'מנהל');
-            }
-        }
-        
-        const regUser = allRegisteredUsers.find(u => u.id === data.targetId);
-        if (regUser) {
-            regUser.role = data.role;
-            regUser.isAdmin = (data.role === 'מנהל');
-        }
-
-        updateUserList();
     });
 
     socket.on('kick-user', (targetId) => {
-        if (!socket.isAdmin) return;
+        const target = users.find(u => u.id === targetId);
+        if (target) {
+            target.online = false;
+            activeUsers = activeUsers.filter(u => u.id !== targetId);
+            io.to(targetId).emit('kicked');
+            updateAllUsersList();
+        }
+    });
 
-        const targetSocket = io.sockets.sockets.get(targetId);
-        if (targetSocket) {
-            targetSocket.emit('kicked');
-            targetSocket.disconnect(true);
+    socket.on('change-nickname', (data) => {
+        const user = users.find(u => u.id === socket.id);
+        if (user) {
+            user.nickname = data.newNickname;
+            updateAllUsersList();
         }
     });
 
     socket.on('disconnect', () => {
-        users = users.filter(u => u.id !== socket.id);
-        
-        const regUser = allRegisteredUsers.find(u => u.id === socket.id);
-        if (regUser) {
-            regUser.online = false;
+        const user = users.find(u => u.id === socket.id);
+        if (user) {
+            user.online = false;
+            activeUsers = activeUsers.filter(u => u.id !== socket.id);
+            updateAllUsersList();
+            io.emit('system-message', { text: `${user.nickname} עזב את הצ'אט`, system: true });
         }
-
-        updateUserList();
+        console.log('משתמש התנתק:', socket.id);
     });
 });
 
-function updateUserList() {
-    io.emit('update-users', { activeUsers: users, allUsers: allRegisteredUsers });
+function updateAllUsersList() {
+    io.emit('update-users', {
+        activeUsers: activeUsers,
+        allUsers: users
+    });
 }
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-    console.log(`השרת רץ בכתובת: http://localhost:${PORT}`);
+server.listen(PORT, () => {
+    console.log(`השרת רץ בהצלחה על פורט ${PORT}`);
 });
