@@ -229,6 +229,7 @@
             border-radius: 3px;
         }
         .btn-admin { background: #4caf50; color: white; }
+        .btn-remove-admin { background: #ff9800; color: white; }
         .btn-kick { background: #e53935; color: white; }
         .clear-chat-btn {
             background-color: #ff9800;
@@ -326,11 +327,12 @@
 
         let currentNickname = localStorage.getItem('chat_nickname') || '';
         let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
+        let isUserOwner = localStorage.getItem('chat_is_owner') === 'true';
 
         if (currentNickname) {
             nicknameInput.value = currentNickname;
             startChatSession();
-            socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
+            socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin, isOwner: isUserOwner });
         }
 
         loginBtn.addEventListener('click', () => {
@@ -342,7 +344,7 @@
             currentNickname = nick;
             localStorage.setItem('chat_nickname', currentNickname);
             
-            socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
+            socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin, isOwner: isUserOwner });
             startChatSession();
         });
 
@@ -386,12 +388,14 @@
             lastClickTime = currentTime;
         });
 
-        socket.on('admin-success', (success) => {
-            if (success) {
+        socket.on('admin-success', (res) => {
+            if (res.success) {
                 isUserAdmin = true;
+                isUserOwner = res.isOwner;
                 localStorage.setItem('chat_is_admin', 'true');
-                alert('התחברת בהצלחה כמנהל!');
-                socket.emit('join', { nickname: currentNickname, isAdmin: true });
+                localStorage.setItem('chat_is_owner', 'true');
+                alert('התחברת בהצלחה כבעלים!');
+                socket.emit('join', { nickname: currentNickname, isAdmin: true, isOwner: true });
             } else {
                 alert('סיסמה שגויה!');
             }
@@ -481,6 +485,10 @@
             if (me && me.isAdmin) {
                 isUserAdmin = true;
                 localStorage.setItem('chat_is_admin', 'true');
+                if (me.isOwner) {
+                    isUserOwner = true;
+                    localStorage.setItem('chat_is_owner', 'true');
+                }
             }
 
             if (isUserAdmin) {
@@ -496,13 +504,23 @@
                             ? `<span class="online-status">מחובר</span>` 
                             : `<span class="offline-status">לא מחובר</span>`;
 
+                        // כפתור ניהול: אם הוא כבר מנהל, רק הבעלים יכול להסיר לו את הניהול
+                        let adminButtonHtml = '';
+                        if (user.role === 'מנהל') {
+                            if (isUserOwner) {
+                                adminButtonHtml = `<button class="btn-remove-admin" onclick="removeRole('${user.id}')">הסר מנהל</button>`;
+                            }
+                        } else {
+                            adminButtonHtml = `<button class="btn-admin" onclick="makeAdmin('${user.id}')">הגדר מנהל</button>`;
+                        }
+
                         item.innerHTML = `
                             <div class="user-info-area">
                                 <span>${user.nickname} ${roleLabel}</span>
                                 ${statusHtml}
                             </div>
                             <div class="user-mgmt-btns">
-                                <button class="btn-admin" onclick="promptRole('${user.id}')">הגדר מנהל</button>
+                                ${adminButtonHtml}
                                 ${user.online ? `<button class="btn-kick" onclick="kickUser('${user.id}')">הסר</button>` : ''}
                             </div>
                         `;
@@ -515,11 +533,13 @@
             }
         });
 
-        function promptRole(targetId) {
-            let choice = prompt('הקלד "מנהל" כדי להוסיף תפקיד, או השאר ריק / כתוב "הסרה" כדי להסיר:');
-            if (choice !== null) {
-                let role = choice.trim() === 'מנהל' ? 'מנהל' : null;
-                socket.emit('set-role', { targetId: targetId, role: role });
+        function makeAdmin(targetId) {
+            socket.emit('set-role', { targetId: targetId, role: 'מנהל' });
+        }
+
+        function removeRole(targetId) {
+            if (confirm('להסיר את הרשאת הניהול מהמשתמש?')) {
+                socket.emit('set-role', { targetId: targetId, role: null });
             }
         }
 
@@ -543,6 +563,7 @@
             if (confirm('האם אתה בטוח שברצונך לעזוב את הקבוצה?')) {
                 localStorage.removeItem('chat_nickname');
                 localStorage.removeItem('chat_is_admin');
+                localStorage.removeItem('chat_is_owner');
                 window.location.reload();
             }
         }
@@ -551,6 +572,7 @@
             alert('הוסרת מהקבוצה על ידי המנהל.');
             localStorage.removeItem('chat_nickname');
             localStorage.removeItem('chat_is_admin');
+            localStorage.removeItem('chat_is_owner');
             window.location.reload();
         });
     </script>
