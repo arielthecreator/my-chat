@@ -135,7 +135,7 @@
             font-size: 13px;
         }
         .ticks.read {
-            color: #34b7f1; /* צבע וי כחול כמו בוואטסאפ */
+            color: #34b7f1;
         }
         .msg-options {
             position: absolute;
@@ -335,7 +335,7 @@
         const chatTitle = document.getElementById('chat-title');
 
         let currentNickname = localStorage.getItem('chat_nickname') || '';
-        let isUserAdmin = localStorage.getItem('chat_is_admin'] === 'true';
+        let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
         let originalTitle = document.title;
         let allUsersCount = 1;
 
@@ -437,7 +437,6 @@
                 if (div) {
                     const ticksEl = div.querySelector('.ticks');
                     if (ticksEl) {
-                        // אם מישהו נוסף חוץ מהשולח קרא את ההודעה (או שכולם קראו)
                         if (data.readBy.length > 1) {
                             ticksEl.innerText = '✓✓';
                             ticksEl.classList.add('read');
@@ -466,7 +465,6 @@
             let badgeHtml = data.role ? `<span class="badge">${data.role}</span>` : '';
             let canEdit = (data.nickname === currentNickname) || isUserAdmin;
 
-            // בדיקה אם ההודעה נקראה ע"י משתמש נוסף לפחות
             let isRead = data.readBy && data.readBy.length > 1;
             let ticksClass = isRead ? 'ticks read' : 'ticks';
 
@@ -497,7 +495,6 @@
 
         function appendSystemMessage(text) {
             const div = document.createElement('div');
-            div.className.replace = 'message system';
             div.className = 'message system';
             div.innerText = text;
             chatMessages.appendChild(div);
