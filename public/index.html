@@ -120,6 +120,23 @@
             margin-right: 5px;
             font-weight: bold;
         }
+        .msg-footer {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            color: #888;
+            margin-top: 4px;
+        }
+        .ticks {
+            font-weight: bold;
+            color: #999;
+            font-size: 13px;
+        }
+        .ticks.read {
+            color: #34b7f1; /* צבע וי כחול כמו בוואטסאפ */
+        }
         .msg-options {
             position: absolute;
             top: 5px;
@@ -211,15 +228,8 @@
             display: flex;
             flex-direction: column;
         }
-        .online-status {
-            font-size: 11px;
-            color: #4caf50;
-            font-weight: bold;
-        }
-        .offline-status {
-            font-size: 11px;
-            color: #999;
-        }
+        .online-status { font-size: 11px; color: #4caf50; font-weight: bold; }
+        .offline-status { font-size: 11px; color: #999; }
         .user-mgmt-btns button {
             font-size: 11px;
             padding: 3px 6px;
@@ -229,7 +239,6 @@
             border-radius: 3px;
         }
         .btn-admin { background: #4caf50; color: white; }
-        .btn-remove-admin { background: #ff9800; color: white; }
         .btn-kick { background: #e53935; color: white; }
         .clear-chat-btn {
             background-color: #ff9800;
@@ -326,17 +335,19 @@
         const chatTitle = document.getElementById('chat-title');
 
         let currentNickname = localStorage.getItem('chat_nickname') || '';
-        let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
+        let isUserAdmin = localStorage.getItem('chat_is_admin'] === 'true';
         let originalTitle = document.title;
+        let allUsersCount = 1;
 
-        // בקשת הרשאה להתראות דפדפן בכניסה
         if ("Notification" in window && Notification.permission !== "granted") {
             Notification.requestPermission();
         }
 
-        // איפוס כותרת כשחוזרים לטאב
         window.addEventListener('focus', () => {
             document.title = originalTitle;
+            if (currentNickname) {
+                socket.emit('mark-as-read', currentNickname);
+            }
         });
 
         if (currentNickname) {
@@ -353,7 +364,6 @@
             }
             currentNickname = nick;
             localStorage.setItem('chat_nickname', currentNickname);
-            
             socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
             startChatSession();
         });
@@ -377,17 +387,12 @@
             }
         });
 
-        menuToggle.addEventListener('click', () => {
-            sidebar.classList.toggle('open');
-        });
-        closeSidebar.addEventListener('click', () => {
-            sidebar.classList.remove('open');
-        });
+        menuToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
+        closeSidebar.addEventListener('click', () => sidebar.classList.remove('open'));
 
         let lastClickTime = 0;
         chatTitle.addEventListener('click', () => {
             if (isUserAdmin) return;
-
             let currentTime = new Date().getTime();
             if (currentTime - lastClickTime < 400) {
                 let password = prompt('הכנס סיסמת מנהל:');
@@ -415,13 +420,31 @@
                 if (data.system) {
                     appendSystemMessage(data.text);
                 } else {
-                    appendChatMessage(data, false); // ללא התראה בטעינה ראשונית
+                    appendChatMessage(data, false);
                 }
             });
+            socket.emit('mark-as-read', currentNickname);
         });
 
         socket.on('new-message', (data) => {
             appendChatMessage(data, true);
+            socket.emit('mark-as-read', currentNickname);
+        });
+
+        socket.on('update-messages-status', (msgs) => {
+            msgs.forEach(data => {
+                const div = document.getElementById(data.id);
+                if (div) {
+                    const ticksEl = div.querySelector('.ticks');
+                    if (ticksEl) {
+                        // אם מישהו נוסף חוץ מהשולח קרא את ההודעה (או שכולם קראו)
+                        if (data.readBy.length > 1) {
+                            ticksEl.innerText = '✓✓';
+                            ticksEl.classList.add('read');
+                        }
+                    }
+                }
+            });
         });
 
         function clearAllMessages() {
@@ -443,22 +466,26 @@
             let badgeHtml = data.role ? `<span class="badge">${data.role}</span>` : '';
             let canEdit = (data.nickname === currentNickname) || isUserAdmin;
 
+            // בדיקה אם ההודעה נקראה ע"י משתמש נוסף לפחות
+            let isRead = data.readBy && data.readBy.length > 1;
+            let ticksClass = isRead ? 'ticks read' : 'ticks';
+
             div.innerHTML = `
                 ${canEdit ? '<span class="msg-options" onclick="toggleMsgMenu(this)">⋮</span>' : ''}
                 <div class="msg-menu">
                     <button onclick="editMsg('${data.id}')">ערוך הודעה</button>
                 </div>
                 <strong>${badgeHtml}${data.nickname}:</strong> <span class="msg-text">${data.text}</span>
+                <div class="msg-footer">
+                    <span class="msg-time">${data.time || ''}</span>
+                    <span class="${ticksClass}">✓✓</span>
+                </div>
             `;
             chatMessages.appendChild(div);
             chatMessages.scrollTop = chatMessages.scrollHeight;
 
-            // אם זו הודעה חדשה שלא נשלחה על ידי המשתמש עצמו
             if (notify && data.nickname !== currentNickname) {
-                // שינוי כותרת הטאב כדי להתריע
                 document.title = "💬 הודעה חדשה התקבלה!";
-
-                // שליחת התראה בדפדפן אם המשתמש נתן אישור
                 if ("Notification" in window && Notification.permission === "granted") {
                     new Notification(`${data.nickname} שלח הודעה:`, {
                         body: data.text,
@@ -470,6 +497,7 @@
 
         function appendSystemMessage(text) {
             const div = document.createElement('div');
+            div.className.replace = 'message system';
             div.className = 'message system';
             div.innerText = text;
             chatMessages.appendChild(div);
@@ -501,8 +529,7 @@
 
         socket.on('update-users', (data) => {
             const activeUsers = data.activeUsers;
-            const allUsers = data.allUsers;
-
+            allUsersCount = data.allUsers.length;
             const me = activeUsers.find(u => u.id === socket.id);
             if (me && me.isAdmin) {
                 isUserAdmin = true;
@@ -512,21 +539,14 @@
             if (isUserAdmin) {
                 sidebarTitle.innerText = "ניהול משתמשים";
                 sidebarContent.innerHTML = '<button class="clear-chat-btn" onclick="clearAllMessages()">🧹 נקה את כל הצ\'אט</button>';
-                
-                allUsers.forEach(user => {
+                data.allUsers.forEach(user => {
                     if (user.nickname !== currentNickname) {
                         const item = document.createElement('div');
                         item.className = 'user-mgmt-item';
                         let roleLabel = user.role ? `(${user.role})` : '';
-                        let statusHtml = user.online 
-                            ? `<span class="online-status">מחובר</span>` 
-                            : `<span class="offline-status">לא מחובר</span>`;
-
+                        let statusHtml = user.online ? `<span class="online-status">מחובר</span>` : `<span class="offline-status">לא מחובר</span>`;
                         item.innerHTML = `
-                            <div class="user-info-area">
-                                <span>${user.nickname} ${roleLabel}</span>
-                                ${statusHtml}
-                            </div>
+                            <div class="user-info-area"><span>${user.nickname} ${roleLabel}</span>${statusHtml}</div>
                             <div class="user-mgmt-btns">
                                 <button class="btn-admin" onclick="promptRole('${user.id}')">הגדר מנהל</button>
                                 ${user.online ? `<button class="btn-kick" onclick="kickUser('${user.id}')">הסר</button>` : ''}
