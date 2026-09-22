@@ -19,9 +19,7 @@ let messages = [];
 io.on('connection', (socket) => {
     console.log('משתמש התחבר:', socket.id);
 
-    // התחברות לצ'אט
     socket.on('join', (data) => {
-        // תמיכה גם אם נשלח מחרוזת פשוטה וגם אובייקט
         let nickname = typeof data === 'string' ? data : (data ? data.nickname : '');
         let requestedAdmin = data && data.isAdmin;
 
@@ -37,7 +35,6 @@ io.on('connection', (socket) => {
         }
 
         const existingUserIndex = users.findIndex(u => u.id === socket.id);
-        
         if (existingUserIndex !== -1) {
             users[existingUserIndex].nickname = socket.nickname;
             users[existingUserIndex].role = socket.role;
@@ -55,7 +52,6 @@ io.on('connection', (socket) => {
         updateUserList();
     });
 
-    // אימות מנהל
     socket.on('verify-admin', (password) => {
         if (password === ADMIN_PASSWORD) {
             socket.isAdmin = true;
@@ -74,7 +70,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // שליחת הודעה
     socket.on('chat-message', (data) => {
         if (!data || !data.text || !data.text.trim()) return;
 
@@ -92,7 +87,6 @@ io.on('connection', (socket) => {
         io.emit('new-message', messageData);
     });
 
-    // עריכת הודעה
     socket.on('edit-message', (data) => {
         const msg = messages.find(m => m.id === data.id);
         if (msg) {
@@ -103,18 +97,21 @@ io.on('connection', (socket) => {
         }
     });
 
-    // שינוי כינוי מתוקן
+    // ניקוי צ'אט מלא (לבעלים בלבד)
+    socket.on('clear-chat', () => {
+        if (!socket.isAdmin) return;
+        messages = []; // מחיקת כל ההיסטוריה בשרת
+        io.emit('chat-cleared'); // עדכון כל המשתמשים לניקוי המסך
+    });
+
     socket.on('change-nickname', (data) => {
         const oldName = socket.nickname;
         const newName = data && data.newNickname ? data.newNickname.trim() : '';
         if (!newName) return;
 
         socket.nickname = newName;
-
         const user = users.find(u => u.id === socket.id);
-        if (user) {
-            user.nickname = newName;
-        }
+        if (user) user.nickname = newName;
 
         const sysMsg = {
             id: Date.now().toString(),
@@ -128,7 +125,6 @@ io.on('connection', (socket) => {
         updateUserList();
     });
 
-    // הגדרת תפקיד למשתמש ע"י מנהל
     socket.on('set-role', (data) => {
         if (!socket.isAdmin) return;
 
@@ -144,7 +140,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // בעיטת משתמש
     socket.on('kick-user', (targetId) => {
         if (!socket.isAdmin) return;
 
