@@ -217,6 +217,17 @@
         }
         .btn-admin { background: #4caf50; color: white; }
         .btn-kick { background: #e53935; color: white; }
+        .clear-chat-btn {
+            background-color: #ff9800;
+            color: white;
+            border: none;
+            padding: 8px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 8px;
+            font-weight: bold;
+            font-size: 13px;
+        }
         .edit-nick-btn {
             background: none;
             border: none;
@@ -302,8 +313,11 @@
         let currentNickname = localStorage.getItem('chat_nickname') || '';
         let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
 
+        // כניסה אוטומטית אם המשתמש כבר היה מחובר (מונע איפוס בטעינה מחדש/משיכה למעלה)
         if (currentNickname) {
             nicknameInput.value = currentNickname;
+            startChatSession();
+            socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
         }
 
         loginBtn.addEventListener('click', () => {
@@ -365,7 +379,6 @@
                 isUserAdmin = true;
                 localStorage.setItem('chat_is_admin', 'true');
                 alert('התחברת בהצלחה כמנהל!');
-                // שליחת הצטרפות מחדש עם דגל מנהל מעודכן לשרת
                 socket.emit('join', { nickname: currentNickname, isAdmin: true });
             } else {
                 alert('סיסמה שגויה!');
@@ -385,6 +398,18 @@
 
         socket.on('new-message', (data) => {
             appendChatMessage(data);
+        });
+
+        // איפוס מלא של הודעות הצ'אט לכולם
+        function clearAllMessages() {
+            if (confirm('האם אתה בטוח שברצונך לנקות את כל הודעות הצ\'אט?')) {
+                socket.emit('clear-chat');
+            }
+        }
+
+        socket.on('chat-cleared', () => {
+            chatMessages.innerHTML = '';
+            alert('הצ\'אט ננוקה בהצלחה.');
         });
 
         function appendChatMessage(data) {
@@ -446,7 +471,8 @@
 
             if (isUserAdmin) {
                 sidebarTitle.innerText = "ניהול משתמשים";
-                sidebarContent.innerHTML = '';
+                sidebarContent.innerHTML = '<button class="clear-chat-btn" onclick="clearAllMessages()">🧹 נקה את כל הצ\'אט</button>';
+                
                 users.forEach(user => {
                     if (user.id !== socket.id) {
                         const item = document.createElement('div');
@@ -485,7 +511,6 @@
         function changeNickname() {
             const newNick = prompt('הכנס כינוי חדש:', currentNickname);
             if (newNick && newNick.trim() !== '' && newNick.trim() !== currentNickname) {
-                const oldNick = currentNickname;
                 currentNickname = newNick.trim();
                 localStorage.setItem('chat_nickname', currentNickname);
                 userDisplay.innerText = `מחובר כ: ${currentNickname}`;
