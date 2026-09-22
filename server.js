@@ -5,29 +5,23 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, { maxHttpBufferSize: 10 * 1024 * 1024 }); // הגדלת נפח להעברת קבצי אודיו קטנים
 
-// הגדרת תיקיית הקבצים הסטטיים
 app.use(express.static(path.join(__dirname, 'public')));
 
-// סיסמת מנהל ברירת מחדל (ניתן לשנות)
 const ADMIN_PASSWORD = '123';
-
-// שמירת נתונים בזיכרון השרת
-let messages = []; // מערך הודעות
-let allUsers = []; // כל המשתמשים שנכנסו אי פעם
-let activeUsers = []; // משתמשים מחוברים כרגע
+let messages = [];
+let allUsers = [];
+let activeUsers = [];
 
 io.on('connection', (socket) => {
     let currentUser = null;
 
-    // הצטרפות לצ'אט
     socket.on('join', (data) => {
         const nickname = data.nickname;
         const isAdmin = data.isAdmin || false;
         currentUser = { id: socket.id, nickname, isAdmin, role: isAdmin ? 'מנהל' : null, online: true };
 
-        // בדיקה אם המשתמש כבר קיים ברשימת כל המשתמשים
         const existingUserIndex = allUsers.findIndex(u => u.nickname === nickname);
         if (existingUserIndex !== -1) {
             allUsers[existingUserIndex].id = socket.id;
@@ -37,13 +31,9 @@ io.on('connection', (socket) => {
             allUsers.push(currentUser);
         }
 
-        // עדכון רשימת המחוברים
         activeUsers = allUsers.filter(u => u.online);
-
-        // שליחת ההודעות הקודמות למשתמש החדש
         socket.emit('load-messages', messages);
 
-        // הודעת מערכת על הצטרפות
         const time = new Date().toLocaleTimeString('he-IL', { 
             timeZone: 'Asia/Jerusalem', 
             hour: '2-digit', 
@@ -57,7 +47,6 @@ io.on('connection', (socket) => {
         updateUsersList();
     });
 
-    // שליחת הודעת צ'אט חדשה
     socket.on('chat-message', (data) => {
         const user = allUsers.find(u => u.id === socket.id);
         const time = new Date().toLocaleTimeString('he-IL', { 
@@ -70,19 +59,18 @@ io.on('connection', (socket) => {
             id: Date.now().toString(),
             nickname: data.nickname,
             text: data.text,
+            type: data.type || 'text', // טקסט או אודיו
             role: user ? user.role : null,
             time: time,
-            readBy: [socket.id] // מי קרא את ההודעה
+            readBy: [socket.id]
         };
 
         messages.push(msgData);
-        // שמור מקסימום 100 הודעות אחרונות שלא ייגמר הזיכרון
         if (messages.length > 100) messages.shift();
 
         io.emit('new-message', msgData);
     });
 
-    // סימון הודעות כנקראו
     socket.on('mark-as-read', (nickname) => {
         let updated = false;
         messages.forEach(msg => {
@@ -96,16 +84,14 @@ io.on('connection', (socket) => {
         }
     });
 
-    // עריכת הודעה
     socket.on('edit-message', (data) => {
         const msg = messages.find(m => m.id === data.id);
-        if (msg) {
+        if (msg && msg.type === 'text') {
             msg.text = data.newText + ' (נערך)';
             io.emit('message-edited', { id: data.id, newText: msg.text });
         }
     });
 
-    // אימות מנהל
     socket.on('verify-admin', (password) => {
         if (password === ADMIN_PASSWORD) {
             const user = allUsers.find(u => u.id === socket.id);
@@ -120,7 +106,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // ניקוי כל הצ'אט (רק למנהל)
     socket.on('clear-chat', () => {
         const user = allUsers.find(u => u.id === socket.id);
         if (user && user.isAdmin) {
@@ -129,7 +114,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // שינוי תפקיד למשתמש
     socket.on('set-role', (data) => {
         const adminUser = allUsers.find(u => u.id === socket.id);
         if (adminUser && adminUser.isAdmin) {
@@ -142,7 +126,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // הסרת משתמש (Kick)
     socket.on('kick-user', (targetId) => {
         const adminUser = allUsers.find(u => u.id === socket.id);
         if (adminUser && adminUser.isAdmin) {
@@ -150,7 +133,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // שינוי כינוי במהלך הצ'אט
     socket.on('change-nickname', (data) => {
         const user = allUsers.find(u => u.id === socket.id);
         if (user) {
@@ -159,7 +141,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // התנתקות משתמש
     socket.on('disconnect', () => {
         if (currentUser) {
             const user = allUsers.find(u => u.id === socket.id);
