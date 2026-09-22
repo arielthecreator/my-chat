@@ -520,9 +520,10 @@
         menuToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
         closeSidebar.addEventListener('click', () => sidebar.classList.remove('open'));
 
+        // מנגנון דאבל-קליק פתוח רק כל עוד המשתמש עדיין לא מנהל
         let lastClickTime = 0;
         chatTitle.addEventListener('click', () => {
-            if (isUserAdmin) return;
+            if (isUserAdmin) return; // אם כבר הזין את הקוד והפך למנהל - לא יעשה כלום יותר!
             let currentTime = new Date().getTime();
             if (currentTime - lastClickTime < 400) {
                 let password = prompt('הכנס סיסמת מנהל:');
