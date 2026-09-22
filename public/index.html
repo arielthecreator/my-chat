@@ -170,9 +170,11 @@
 
         #chat-form {
             display: flex;
+            align-items: center;
             padding: 10px;
             background: white;
             border-top: 1px solid #ddd;
+            gap: 5px;
         }
         #chat-input {
             flex: 1;
@@ -182,13 +184,41 @@
             font-size: 15px;
         }
         #chat-form button {
-            padding: 10px 20px;
+            padding: 10px 15px;
             background-color: #0084ff;
             color: white;
             border: none;
             border-radius: 5px;
-            margin-right: 10px;
             cursor: pointer;
+        }
+        #mic-btn {
+            background-color: #e4e6eb;
+            color: #333;
+            font-size: 18px;
+            border-radius: 50%;
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        #mic-btn.recording {
+            background-color: #e53935;
+            color: white;
+            animation: pulse 1.2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        audio {
+            max-width: 100%;
+            height: 35px;
+            margin-top: 5px;
         }
         #sidebar {
             position: absolute;
@@ -309,6 +339,7 @@
 
             <form id="chat-form">
                 <input type="text" id="chat-input" placeholder="כתוב הודעה..." autocomplete="off">
+                <button type="button" id="mic-btn" title="הקלט הודעה קולית">🎤</button>
                 <button type="submit">שלח</button>
             </form>
         </div>
@@ -326,6 +357,7 @@
         const chatInput = document.getElementById('chat-input');
         const chatMessages = document.getElementById('chat-messages');
         const userDisplay = document.getElementById('user-display');
+        const micBtn = document.getElementById('mic-btn');
         
         const menuToggle = document.getElementById('menu-toggle');
         const sidebar = document.getElementById('sidebar');
@@ -337,7 +369,10 @@
         let currentNickname = localStorage.getItem('chat_nickname') || '';
         let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
         let originalTitle = document.title;
-        let allUsersCount = 1;
+        
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
 
         if ("Notification" in window && Notification.permission !== "granted") {
             Notification.requestPermission();
@@ -378,12 +413,56 @@
             userDisplay.innerText = `מחובר כ: ${currentNickname}`;
         }
 
+        // שליחת הודעת טקסט רגילה
         chatForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const text = chatInput.value.trim();
             if (text !== '') {
-                socket.emit('chat-message', { nickname: currentNickname, text: text });
+                socket.emit('chat-message', { nickname: currentNickname, text: text, type: 'text' });
                 chatInput.value = '';
+            }
+        });
+
+        // ניהול הקלטה קולית
+        micBtn.addEventListener('click', async () => {
+            if (!isRecording) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+
+                    mediaRecorder.ondataavailable = event => {
+                        audioChunks.push(event.data);
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        const reader = new FileReader();
+                        reader.readAsDataURL(audioBlob);
+                        reader.onloadend = () => {
+                            const base64Audio = reader.result;
+                            socket.emit('chat-message', { 
+                                nickname: currentNickname, 
+                                text: base64Audio, 
+                                type: 'audio' 
+                            });
+                        };
+                        // הפסקת השימוש במיקרופון
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+
+                    mediaRecorder.start();
+                    isRecording = true;
+                    micBtn.classList.add('recording');
+                    micBtn.innerText = '⏹';
+                } catch (err) {
+                    alert('לא ניתן לגשת למיקרופון. ודא שאישרת הרשאת מיקרופון בדפדפן.');
+                }
+            } else {
+                mediaRecorder.stop();
+                isRecording = false;
+                micBtn.classList.remove('recording');
+                micBtn.innerText = '🎤';
             }
         });
 
@@ -463,17 +542,24 @@
             div.id = data.id;
 
             let badgeHtml = data.role ? `<span class="badge">${data.role}</span>` : '';
-            let canEdit = (data.nickname === currentNickname) || isUserAdmin;
+            let canEdit = (data.nickname === currentNickname) && (data.type === 'text') || isUserAdmin;
 
             let isRead = data.readBy && data.readBy.length > 1;
             let ticksClass = isRead ? 'ticks read' : 'ticks';
+
+            let contentHtml = '';
+            if (data.type === 'audio') {
+                contentHtml = `<audio controls src="${data.text}"></audio>`;
+            } else {
+                contentHtml = `<span class="msg-text">${data.text}</span>`;
+            }
 
             div.innerHTML = `
                 ${canEdit ? '<span class="msg-options" onclick="toggleMsgMenu(this)">⋮</span>' : ''}
                 <div class="msg-menu">
                     <button onclick="editMsg('${data.id}')">ערוך הודעה</button>
                 </div>
-                <strong>${badgeHtml}${data.nickname}:</strong> <span class="msg-text">${data.text}</span>
+                <strong>${badgeHtml}${data.nickname}:</strong> ${contentHtml}
                 <div class="msg-footer">
                     <span class="msg-time">${data.time || ''}</span>
                     <span class="${ticksClass}">✓✓</span>
@@ -485,8 +571,8 @@
             if (notify && data.nickname !== currentNickname) {
                 document.title = "💬 הודעה חדשה התקבלה!";
                 if ("Notification" in window && Notification.permission === "granted") {
-                    new Notification(`${data.nickname} שלח הודעה:`, {
-                        body: data.text,
+                    new Notification(`${data.nickname} שלח הודעה קולית/חדשה`, {
+                        body: data.type === 'audio' ? '🎤 [הודעה קולית]' : data.text,
                         icon: "https://cdn-icons-png.flaticon.com/512/1041/1041916.png"
                     });
                 }
@@ -510,6 +596,7 @@
         function editMsg(id) {
             const msgDiv = document.getElementById(id);
             const textSpan = msgDiv.querySelector('.msg-text');
+            if (!textSpan) return;
             const newText = prompt('ערוך הודעה:', textSpan.innerText);
             if (newText !== null && newText.trim() !== '') {
                 socket.emit('edit-message', { id: id, newText: newText.trim() });
@@ -520,13 +607,13 @@
         socket.on('message-edited', (data) => {
             const msgDiv = document.getElementById(data.id);
             if (msgDiv) {
-                msgDiv.querySelector('.msg-text').innerText = data.newText;
+                const textSpan = msgDiv.querySelector('.msg-text');
+                if (textSpan) textSpan.innerText = data.newText;
             }
         });
 
         socket.on('update-users', (data) => {
             const activeUsers = data.activeUsers;
-            allUsersCount = data.allUsers.length;
             const me = activeUsers.find(u => u.id === socket.id);
             if (me && me.isAdmin) {
                 isUserAdmin = true;
