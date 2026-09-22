@@ -1,77 +1,93 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static('public'));
+// הגדרת תיקיית הקבצים הסטטיים
+app.use(express.static(path.join(__dirname, 'public')));
 
-let messages = [];
-let users = []; 
-let activeUsers = []; 
-const ADMIN_PASSWORD = "123"; 
+// סיסמת מנהל ברירת מחדל (ניתן לשנות)
+const ADMIN_PASSWORD = '123';
+
+// שמירת נתונים בזיכרון השרת
+let messages = []; // מערך הודעות
+let allUsers = []; // כל המשתמשים שנכנסו אי פעם
+let activeUsers = []; // משתמשים מחוברים כרגע
 
 io.on('connection', (socket) => {
-    console.log('משתמש התחבר:', socket.id);
+    let currentUser = null;
 
+    // הצטרפות לצ'אט
     socket.on('join', (data) => {
         const nickname = data.nickname;
         const isAdmin = data.isAdmin || false;
+        currentUser = { id: socket.id, nickname, isAdmin, role: isAdmin ? 'מנהל' : null, online: true };
 
-        let existingUser = users.find(u => u.id === socket.id || u.nickname === nickname);
-        
-        let userRole = null;
-        if (existingUser) {
-            userRole = existingUser.role;
+        // בדיקה אם המשתמש כבר קיים ברשימת כל המשתמשים
+        const existingUserIndex = allUsers.findIndex(u => u.nickname === nickname);
+        if (existingUserIndex !== -1) {
+            allUsers[existingUserIndex].id = socket.id;
+            allUsers[existingUserIndex].online = true;
+            if (isAdmin) allUsers[existingUserIndex].role = 'מנהל';
+        } else {
+            allUsers.push(currentUser);
         }
-        if (isAdmin) {
-            userRole = 'מנהל';
-        }
 
-        users = users.filter(u => u.nickname !== nickname && u.id !== socket.id);
-        
-        const userData = {
-            id: socket.id,
-            nickname: nickname,
-            role: userRole,
-            online: true
-        };
-        
-        users.push(userData);
-        activeUsers.push(userData);
+        // עדכון רשימת המחוברים
+        activeUsers = allUsers.filter(u => u.online);
 
+        // שליחת ההודעות הקודמות למשתמש החדש
         socket.emit('load-messages', messages);
-        updateAllUsersList();
 
-        io.emit('system-message', { text: `${nickname} הצטרף לצ'אט`, system: true });
+        // הודעת מערכת על הצטרפות
+        const time = new Date().toLocaleTimeString('he-IL', { 
+            timeZone: 'Asia/Jerusalem', 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
+
+        const sysMsg = { id: Date.now().toString(), text: `${nickname} הצטרף/ה לצ'אט`, system: true, time };
+        messages.push(sysMsg);
+        io.emit('new-message', sysMsg);
+
+        updateUsersList();
     });
 
+    // שליחת הודעת צ'אט חדשה
     socket.on('chat-message', (data) => {
-        const timeNow = new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-        
-        const messageObj = {
-            id: 'msg_' + Date.now() + Math.random(),
+        const user = allUsers.find(u => u.id === socket.id);
+        const time = new Date().toLocaleTimeString('he-IL', { 
+            timeZone: 'Asia/Jerusalem', 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
+
+        const msgData = {
+            id: Date.now().toString(),
             nickname: data.nickname,
             text: data.text,
-            time: timeNow,
-            role: users.find(u => u.nickname === data.nickname)?.role || null,
-            readBy: [data.nickname] // מי כבר קרא את ההודעה
+            role: user ? user.role : null,
+            time: time,
+            readBy: [socket.id] // מי קרא את ההודעה
         };
 
-        messages.push(messageObj);
-        if (messages.length > 100) messages.shift(); // שומר עד 100 הודעות אחרונות
+        messages.push(msgData);
+        // שמור מקסימום 100 הודעות אחרונות שלא ייגמר הזיכרון
+        if (messages.length > 100) messages.shift();
 
-        io.emit('new-message', messageObj);
+        io.emit('new-message', msgData);
     });
 
-    // סימון הודעות כנקראו על ידי משתמש שנמצא בצ'אט
+    // סימון הודעות כנקראו
     socket.on('mark-as-read', (nickname) => {
         let updated = false;
         messages.forEach(msg => {
-            if (!msg.readBy.includes(nickname)) {
-                msg.readBy.push(nickname);
+            if (!msg.system && msg.readBy && !msg.readBy.includes(socket.id)) {
+                msg.readBy.push(socket.id);
                 updated = true;
             }
         });
@@ -80,74 +96,90 @@ io.on('connection', (socket) => {
         }
     });
 
+    // עריכת הודעה
     socket.on('edit-message', (data) => {
         const msg = messages.find(m => m.id === data.id);
         if (msg) {
-            msg.newText = data.newText;
-            msg.text = data.newText; // עדכון הטקסט
-            io.emit('message-edited', { id: data.id, newText: data.newText });
+            msg.text = data.newText + ' (נערך)';
+            io.emit('message-edited', { id: data.id, newText: msg.text });
         }
     });
 
-    socket.on('clear-chat', () => {
-        messages = [];
-        io.emit('chat-cleared');
-    });
-
+    // אימות מנהל
     socket.on('verify-admin', (password) => {
         if (password === ADMIN_PASSWORD) {
+            const user = allUsers.find(u => u.id === socket.id);
+            if (user) {
+                user.role = 'מנהל';
+                user.isAdmin = true;
+            }
             socket.emit('admin-success', true);
+            updateUsersList();
         } else {
             socket.emit('admin-success', false);
         }
     });
 
+    // ניקוי כל הצ'אט (רק למנהל)
+    socket.on('clear-chat', () => {
+        const user = allUsers.find(u => u.id === socket.id);
+        if (user && user.isAdmin) {
+            messages = [];
+            io.emit('chat-cleared');
+        }
+    });
+
+    // שינוי תפקיד למשתמש
     socket.on('set-role', (data) => {
-        const target = users.find(u => u.id === data.targetId);
-        if (target) {
-            target.role = data.role;
-            updateAllUsersList();
+        const adminUser = allUsers.find(u => u.id === socket.id);
+        if (adminUser && adminUser.isAdmin) {
+            const target = allUsers.find(u => u.id === data.targetId);
+            if (target) {
+                target.role = data.role;
+                target.isAdmin = (data.role === 'מנהל');
+                updateUsersList();
+            }
         }
     });
 
+    // הסרת משתמש (Kick)
     socket.on('kick-user', (targetId) => {
-        const target = users.find(u => u.id === targetId);
-        if (target) {
-            target.online = false;
-            activeUsers = activeUsers.filter(u => u.id !== targetId);
+        const adminUser = allUsers.find(u => u.id === socket.id);
+        if (adminUser && adminUser.isAdmin) {
             io.to(targetId).emit('kicked');
-            updateAllUsersList();
         }
     });
 
+    // שינוי כינוי במהלך הצ'אט
     socket.on('change-nickname', (data) => {
-        const user = users.find(u => u.id === socket.id);
+        const user = allUsers.find(u => u.id === socket.id);
         if (user) {
             user.nickname = data.newNickname;
-            updateAllUsersList();
+            updateUsersList();
         }
     });
 
+    // התנתקות משתמש
     socket.on('disconnect', () => {
-        const user = users.find(u => u.id === socket.id);
-        if (user) {
-            user.online = false;
-            activeUsers = activeUsers.filter(u => u.id !== socket.id);
-            updateAllUsersList();
-            io.emit('system-message', { text: `${user.nickname} עזב את הצ'אט`, system: true });
+        if (currentUser) {
+            const user = allUsers.find(u => u.id === socket.id);
+            if (user) {
+                user.online = false;
+            }
+            activeUsers = allUsers.filter(u => u.online);
+            updateUsersList();
         }
-        console.log('משתמש התנתק:', socket.id);
     });
-});
 
-function updateAllUsersList() {
-    io.emit('update-users', {
-        activeUsers: activeUsers,
-        allUsers: users
-    });
-}
+    function updateUsersList() {
+        io.emit('update-users', {
+            activeUsers: activeUsers,
+            allUsers: allUsers
+        });
+    }
+});
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`השרת רץ בהצלחה על פורט ${PORT}`);
+    console.log(`השרת רץ בהצלחה בפורט ${PORT}`);
 });
