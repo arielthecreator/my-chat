@@ -168,6 +168,32 @@
         }
         .msg-menu button:hover { background: #f0f2f5; }
 
+        /* סגנון הקלדה בועה בסגנון וואטסאפ */
+        #typing-indicator {
+            padding: 8px 12px;
+            background: white;
+            border-radius: 15px;
+            align-self: flex-start;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            display: none;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 5px;
+        }
+        .typing-dot {
+            width: 7px;
+            height: 7px;
+            background-color: #90949c;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
+
         #chat-form {
             display: flex;
             align-items: center;
@@ -248,7 +274,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 14px;
+            font-size: 13px;
             margin-bottom: 8px;
             background: #f9f9f9;
             padding: 6px;
@@ -259,7 +285,7 @@
             flex-direction: column;
         }
         .online-status { font-size: 11px; color: #4caf50; font-weight: bold; }
-        .offline-status { font-size: 11px; color: #999; }
+        .offline-status { font-size: 11px; color: #888; }
         .user-mgmt-btns button {
             font-size: 11px;
             padding: 3px 6px;
@@ -335,7 +361,15 @@
                 <button class="leave-btn" onclick="leaveChat()">עזוב קבוצה</button>
             </div>
 
-            <div id="chat-messages"></div>
+            <div id="chat-messages">
+                <!-- חיווי הקלדה -->
+                <div id="typing-indicator">
+                    <span id="typing-text" style="font-size: 12px; color: #65676b;">מישהו מקליד</span>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            </div>
 
             <form id="chat-form">
                 <input type="text" id="chat-input" placeholder="כתוב הודעה..." autocomplete="off">
@@ -358,6 +392,8 @@
         const chatMessages = document.getElementById('chat-messages');
         const userDisplay = document.getElementById('user-display');
         const micBtn = document.getElementById('mic-btn');
+        const typingIndicator = document.getElementById('typing-indicator');
+        const typingText = document.getElementById('typing-text');
         
         const menuToggle = document.getElementById('menu-toggle');
         const sidebar = document.getElementById('sidebar');
@@ -369,11 +405,13 @@
         let currentNickname = localStorage.getItem('chat_nickname') || '';
         let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
         let originalTitle = document.title;
+        let typingTimeout;
         
         let mediaRecorder;
         let audioChunks = [];
         let isRecording = false;
 
+        // בקשת הרשאת התראות בדפדפן
         if ("Notification" in window && Notification.permission !== "granted") {
             Notification.requestPermission();
         }
@@ -381,7 +419,7 @@
         window.addEventListener('focus', () => {
             document.title = originalTitle;
             if (currentNickname) {
-                socket.emit('mark-as-read', currentNickname);
+                socket.emit('mark-as-read');
             }
         });
 
@@ -413,17 +451,37 @@
             userDisplay.innerText = `מחובר כ: ${currentNickname}`;
         }
 
-        // שליחת הודעת טקסט רגילה
+        // שליחת איתות הקלדה לשרת
+        chatInput.addEventListener('input', () => {
+            socket.emit('typing', { nickname: currentNickname });
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => {
+                socket.emit('typing', { nickname: '' });
+            }, 1000);
+        });
+
+        socket.on('display-typing', (data) => {
+            if (data.nickname && data.nickname !== currentNickname) {
+                typingText.innerText = `${data.nickname} מקליד/ה`;
+                typingIndicator.style.display = 'flex';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            } else {
+                typingIndicator.style.display = 'none';
+            }
+        });
+
+        // שליחת הודעת טקסט
         chatForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const text = chatInput.value.trim();
             if (text !== '') {
                 socket.emit('chat-message', { nickname: currentNickname, text: text, type: 'text' });
                 chatInput.value = '';
+                socket.emit('typing', { nickname: '' });
             }
         });
 
-        // ניהול הקלטה קולית
+        // הקלטה קולית
         micBtn.addEventListener('click', async () => {
             if (!isRecording) {
                 try {
@@ -447,7 +505,6 @@
                                 type: 'audio' 
                             });
                         };
-                        // הפסקת השימוש במיקרופון
                         stream.getTracks().forEach(track => track.stop());
                     };
 
@@ -456,7 +513,7 @@
                     micBtn.classList.add('recording');
                     micBtn.innerText = '⏹';
                 } catch (err) {
-                    alert('לא ניתן לגשת למיקרופון. ודא שאישרת הרשאת מיקרופון בדפדפן.');
+                    alert('לא ניתן לגשת למיקרופון.');
                 }
             } else {
                 mediaRecorder.stop();
@@ -494,7 +551,7 @@
         });
 
         socket.on('load-messages', (msgs) => {
-            chatMessages.innerHTML = '';
+            chatMessages.querySelectorAll('.message').forEach(m => m.remove());
             msgs.forEach(data => {
                 if (data.system) {
                     appendSystemMessage(data.text);
@@ -502,12 +559,12 @@
                     appendChatMessage(data, false);
                 }
             });
-            socket.emit('mark-as-read', currentNickname);
+            socket.emit('mark-as-read');
         });
 
         socket.on('new-message', (data) => {
             appendChatMessage(data, true);
-            socket.emit('mark-as-read', currentNickname);
+            socket.emit('mark-as-read');
         });
 
         socket.on('update-messages-status', (msgs) => {
@@ -515,24 +572,22 @@
                 const div = document.getElementById(data.id);
                 if (div) {
                     const ticksEl = div.querySelector('.ticks');
-                    if (ticksEl) {
-                        if (data.readBy.length > 1) {
-                            ticksEl.innerText = '✓✓';
-                            ticksEl.classList.add('read');
-                        }
+                    if (ticksEl && data.readBy.length > 1) {
+                        ticksEl.innerText = '✓✓';
+                        ticksEl.classList.add('read');
                     }
                 }
             });
         });
 
         function clearAllMessages() {
-            if (confirm('האם אתה בטוח שברצונך לנקות את כל הודעות הצ\'אט?')) {
+            if (confirm('האם אתה בטוח שברצונך לנקות את כל הצ\'אט?')) {
                 socket.emit('clear-chat');
             }
         }
 
         socket.on('chat-cleared', () => {
-            chatMessages.innerHTML = '';
+            chatMessages.querySelectorAll('.message').forEach(m => m.remove());
             alert('הצ\'אט נוקה בהצלחה.');
         });
 
@@ -547,12 +602,7 @@
             let isRead = data.readBy && data.readBy.length > 1;
             let ticksClass = isRead ? 'ticks read' : 'ticks';
 
-            let contentHtml = '';
-            if (data.type === 'audio') {
-                contentHtml = `<audio controls src="${data.text}"></audio>`;
-            } else {
-                contentHtml = `<span class="msg-text">${data.text}</span>`;
-            }
+            let contentHtml = data.type === 'audio' ? `<audio controls src="${data.text}"></audio>` : `<span class="msg-text">${data.text}</span>`;
 
             div.innerHTML = `
                 ${canEdit ? '<span class="msg-options" onclick="toggleMsgMenu(this)">⋮</span>' : ''}
@@ -565,16 +615,32 @@
                     <span class="${ticksClass}">✓✓</span>
                 </div>
             `;
-            chatMessages.appendChild(div);
+            
+            // מכניסים לפני אלמנט ההקלדה כדי שההקלדה תמיד תישאר למטה
+            chatMessages.insertBefore(div, typingIndicator);
             chatMessages.scrollTop = chatMessages.scrollHeight;
 
+            // הפעלת התראות מערכת ברקע
             if (notify && data.nickname !== currentNickname) {
-                document.title = "💬 הודעה חדשה התקבלה!";
+                document.title = "💬 הודעה חדשה!";
                 if ("Notification" in window && Notification.permission === "granted") {
-                    new Notification(`${data.nickname} שלח הודעה קולית/חדשה`, {
-                        body: data.type === 'audio' ? '🎤 [הודעה קולית]' : data.text,
-                        icon: "https://cdn-icons-png.flaticon.com/512/1041/1041916.png"
-                    });
+                    try {
+                        navigator.serviceWorker.ready.then(registration => {
+                            registration.showNotification(data.nickname, {
+                                body: data.type === 'audio' ? '🎤 [הודעה קולית]' : data.text,
+                                icon: "https://cdn-icons-png.flaticon.com/512/1041/1041916.png"
+                            });
+                        }).catch(() => {
+                            new Notification(data.nickname, {
+                                body: data.type === 'audio' ? '🎤 [הודעה קולית]' : data.text,
+                                icon: "https://cdn-icons-png.flaticon.com/512/1041/1041916.png"
+                            });
+                        });
+                    } catch (e) {
+                        new Notification(data.nickname, {
+                            body: data.type === 'audio' ? '🎤 [הודעה קולית]' : data.text
+                        });
+                    }
                 }
             }
         }
@@ -583,7 +649,7 @@
             const div = document.createElement('div');
             div.className = 'message system';
             div.innerText = text;
-            chatMessages.appendChild(div);
+            chatMessages.insertBefore(div, typingIndicator);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
@@ -612,6 +678,7 @@
             }
         });
 
+        // עדכון תפריט צד (כולל "נראה לאחרונה" סודי למנהלים)
         socket.on('update-users', (data) => {
             const activeUsers = data.activeUsers;
             const me = activeUsers.find(u => u.id === socket.id);
@@ -621,16 +688,22 @@
             }
 
             if (isUserAdmin) {
-                sidebarTitle.innerText = "ניהול משתמשים";
+                sidebarTitle.innerText = "ניהול משתמשים (סודי)";
                 sidebarContent.innerHTML = '<button class="clear-chat-btn" onclick="clearAllMessages()">🧹 נקה את כל הצ\'אט</button>';
                 data.allUsers.forEach(user => {
                     if (user.nickname !== currentNickname) {
                         const item = document.createElement('div');
                         item.className = 'user-mgmt-item';
                         let roleLabel = user.role ? `(${user.role})` : '';
-                        let statusHtml = user.online ? `<span class="online-status">מחובר</span>` : `<span class="offline-status">לא מחובר</span>`;
+                        let statusHtml = user.online 
+                            ? `<span class="online-status">מחובר כעת</span>` 
+                            : `<span class="offline-status">נראה לאחרונה: ${user.lastSeen || 'לא ידוע'}</span>`;
+                        
                         item.innerHTML = `
-                            <div class="user-info-area"><span>${user.nickname} ${roleLabel}</span>${statusHtml}</div>
+                            <div class="user-info-area">
+                                <strong style="font-size:14px;">${user.nickname} ${roleLabel}</strong>
+                                ${statusHtml}
+                            </div>
                             <div class="user-mgmt-btns">
                                 <button class="btn-admin" onclick="promptRole('${user.id}')">הגדר מנהל</button>
                                 ${user.online ? `<button class="btn-kick" onclick="kickUser('${user.id}')">הסר</button>` : ''}
