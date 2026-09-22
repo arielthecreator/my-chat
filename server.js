@@ -5,7 +5,7 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { maxHttpBufferSize: 10 * 1024 * 1024 }); // הגדלת נפח להעברת קבצי אודיו קטנים
+const io = new Server(server, { maxHttpBufferSize: 10 * 1024 * 1024 });
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -14,18 +14,27 @@ let messages = [];
 let allUsers = [];
 let activeUsers = [];
 
+function getJerusalemTime() {
+    return new Date().toLocaleTimeString('he-IL', { 
+        timeZone: 'Asia/Jerusalem', 
+        hour: '2-digit', 
+        minute: '2-digit' 
+    });
+}
+
 io.on('connection', (socket) => {
     let currentUser = null;
 
     socket.on('join', (data) => {
         const nickname = data.nickname;
         const isAdmin = data.isAdmin || false;
-        currentUser = { id: socket.id, nickname, isAdmin, role: isAdmin ? 'מנהל' : null, online: true };
+        currentUser = { id: socket.id, nickname, isAdmin, role: isAdmin ? 'מנהל' : null, online: true, lastSeen: 'מחובר כעת' };
 
         const existingUserIndex = allUsers.findIndex(u => u.nickname === nickname);
         if (existingUserIndex !== -1) {
             allUsers[existingUserIndex].id = socket.id;
             allUsers[existingUserIndex].online = true;
+            allUsers[existingUserIndex].lastSeen = 'מחובר כעת';
             if (isAdmin) allUsers[existingUserIndex].role = 'מנהל';
         } else {
             allUsers.push(currentUser);
@@ -34,12 +43,7 @@ io.on('connection', (socket) => {
         activeUsers = allUsers.filter(u => u.online);
         socket.emit('load-messages', messages);
 
-        const time = new Date().toLocaleTimeString('he-IL', { 
-            timeZone: 'Asia/Jerusalem', 
-            hour: '2-digit', 
-            minute: '2-digit' 
-        });
-
+        const time = getJerusalemTime();
         const sysMsg = { id: Date.now().toString(), text: `${nickname} הצטרף/ה לצ'אט`, system: true, time };
         messages.push(sysMsg);
         io.emit('new-message', sysMsg);
@@ -47,19 +51,20 @@ io.on('connection', (socket) => {
         updateUsersList();
     });
 
+    // חיווי הקלדה
+    socket.on('typing', (data) => {
+        socket.broadcast.emit('display-typing', data);
+    });
+
     socket.on('chat-message', (data) => {
         const user = allUsers.find(u => u.id === socket.id);
-        const time = new Date().toLocaleTimeString('he-IL', { 
-            timeZone: 'Asia/Jerusalem', 
-            hour: '2-digit', 
-            minute: '2-digit' 
-        });
+        const time = getJerusalemTime();
 
         const msgData = {
             id: Date.now().toString(),
             nickname: data.nickname,
             text: data.text,
-            type: data.type || 'text', // טקסט או אודיו
+            type: data.type || 'text',
             role: user ? user.role : null,
             time: time,
             readBy: [socket.id]
@@ -71,7 +76,7 @@ io.on('connection', (socket) => {
         io.emit('new-message', msgData);
     });
 
-    socket.on('mark-as-read', (nickname) => {
+    socket.on('mark-as-read', () => {
         let updated = false;
         messages.forEach(msg => {
             if (!msg.system && msg.readBy && !msg.readBy.includes(socket.id)) {
@@ -146,6 +151,7 @@ io.on('connection', (socket) => {
             const user = allUsers.find(u => u.id === socket.id);
             if (user) {
                 user.online = false;
+                user.lastSeen = getJerusalemTime();
             }
             activeUsers = allUsers.filter(u => u.online);
             updateUsersList();
