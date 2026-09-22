@@ -14,6 +14,7 @@ app.get('/', (req, res) => {
 });
 
 let users = [];
+let allRegisteredUsers = []; // כל מי שנרשם אי פעם לצ'אט
 let messages = [];
 
 io.on('connection', (socket) => {
@@ -48,6 +49,20 @@ io.on('connection', (socket) => {
             });
         }
 
+        // הוספה לרשימת כל המשתמשים שנרשמו אי פעם
+        const regIndex = allRegisteredUsers.findIndex(u => u.nickname === socket.nickname);
+        if (regIndex !== -1) {
+            allRegisteredUsers[regIndex].online = true;
+            allRegisteredUsers[regIndex].id = socket.id;
+        } else {
+            allRegisteredUsers.push({
+                id: socket.id,
+                nickname: socket.nickname,
+                role: socket.role,
+                online: true
+            });
+        }
+
         socket.emit('load-messages', messages);
         updateUserList();
     });
@@ -61,6 +76,10 @@ io.on('connection', (socket) => {
             if (user) {
                 user.isAdmin = true;
                 user.role = 'מנהל';
+            }
+            const regUser = allRegisteredUsers.find(u => u.nickname === socket.nickname);
+            if (regUser) {
+                regUser.role = 'מנהל';
             }
 
             socket.emit('admin-success', true);
@@ -97,11 +116,10 @@ io.on('connection', (socket) => {
         }
     });
 
-    // ניקוי צ'אט מלא (לבעלים בלבד)
     socket.on('clear-chat', () => {
         if (!socket.isAdmin) return;
-        messages = []; // מחיקת כל ההיסטוריה בשרת
-        io.emit('chat-cleared'); // עדכון כל המשתמשים לניקוי המסך
+        messages = [];
+        io.emit('chat-cleared');
     });
 
     socket.on('change-nickname', (data) => {
@@ -112,6 +130,12 @@ io.on('connection', (socket) => {
         socket.nickname = newName;
         const user = users.find(u => u.id === socket.id);
         if (user) user.nickname = newName;
+
+        // עדכון ברשימת כל המשתמשים
+        const regUser = allRegisteredUsers.find(u => u.nickname === oldName);
+        if (regUser) {
+            regUser.nickname = newName;
+        }
 
         const sysMsg = {
             id: Date.now().toString(),
@@ -136,8 +160,12 @@ io.on('connection', (socket) => {
                 targetSocket.role = data.role;
                 if (data.role === 'מנהל') targetSocket.isAdmin = true;
             }
-            updateUserList();
         }
+        const regUser = allRegisteredUsers.find(u => u.id === data.targetId);
+        if (regUser) {
+            regUser.role = data.role;
+        }
+        updateUserList();
     });
 
     socket.on('kick-user', (targetId) => {
@@ -152,12 +180,20 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         users = users.filter(u => u.id !== socket.id);
+        
+        // עדכון סטטוס לא מקוון ברשימת כל המשתמשים
+        const regUser = allRegisteredUsers.find(u => u.id === socket.id);
+        if (regUser) {
+            regUser.online = false;
+        }
+
         updateUserList();
     });
 });
 
 function updateUserList() {
-    io.emit('update-users', users);
+    // שולחים למנהלים את כל מי שנרשם אי פעם (allRegisteredUsers)
+    io.emit('update-users', { activeUsers: users, allUsers: allRegisteredUsers });
 }
 
 const PORT = process.env.PORT || 3000;
