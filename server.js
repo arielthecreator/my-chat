@@ -11,8 +11,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const ADMIN_PASSWORD = '123';
 let messages = [];
-let allUsers = [];
-let activeUsers = [];
+let allUsers = []; // יכיל את כל המשתמשים שנרשמו אי פעם
 
 function getJerusalemTime() {
     return new Date().toLocaleTimeString('he-IL', { 
@@ -28,25 +27,34 @@ io.on('connection', (socket) => {
     socket.on('join', (data) => {
         const nickname = data.nickname;
         const isAdmin = data.isAdmin || false;
+        
         currentUser = { id: socket.id, nickname, isAdmin, role: isAdmin ? 'מנהל' : null, online: true, lastSeen: 'מחובר כעת' };
 
-        const existingUserIndex = allUsers.findIndex(u => u.nickname === nickname);
-        if (existingUserIndex !== -1) {
-            allUsers[existingUserIndex].id = socket.id;
-            allUsers[existingUserIndex].online = true;
-            allUsers[existingUserIndex].lastSeen = 'מחובר כעת';
-            if (isAdmin) allUsers[existingUserIndex].role = 'מנהל';
+        // נבדוק אם המשתמש כבר קיים במערכת (לפי כינוי)
+        const existingUser = allUsers.find(u => u.nickname === nickname);
+        let isFirstTime = false;
+
+        if (existingUser) {
+            // מעדכנים את ה-Socket ID העדכני שלו ומסמנים כמחובר
+            existingUser.id = socket.id;
+            existingUser.online = true;
+            existingUser.lastSeen = 'מחובר כעת';
+            if (isAdmin) existingUser.role = 'מנהל';
         } else {
+            // זה משתמש חדש לגמרי שנכנס לראשונה!
+            isFirstTime = true;
             allUsers.push(currentUser);
         }
 
-        activeUsers = allUsers.filter(u => u.online);
         socket.emit('load-messages', messages);
 
-        const time = getJerusalemTime();
-        const sysMsg = { id: Date.now().toString(), text: `${nickname} הצטרף/ה לצ'אט`, system: true, time };
-        messages.push(sysMsg);
-        io.emit('new-message', sysMsg);
+        // הודעת מערכת תופיע אך ורק בפעם הראשונה שהמשתמש נרשם לצ'אט
+        if (isFirstTime) {
+            const time = getJerusalemTime();
+            const sysMsg = { id: Date.now().toString(), text: `${nickname} הצטרף/ה לצ'אט`, system: true, time };
+            messages.push(sysMsg);
+            io.emit('new-message', sysMsg);
+        }
 
         updateUsersList();
     });
@@ -153,15 +161,13 @@ io.on('connection', (socket) => {
                 user.online = false;
                 user.lastSeen = getJerusalemTime();
             }
-            activeUsers = allUsers.filter(u => u.online);
             updateUsersList();
         }
     });
 
     function updateUsersList() {
         io.emit('update-users', {
-            activeUsers: activeUsers,
-            allUsers: allUsers
+            allUsers: allUsers // שולחים את כל המשתמשים שנרשמו אי פעם למערכת
         });
     }
 });
