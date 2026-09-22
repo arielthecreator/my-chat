@@ -14,7 +14,7 @@ app.get('/', (req, res) => {
 });
 
 let users = [];
-let allRegisteredUsers = []; // כל מי שנרשם אי פעם לצ'אט
+let allRegisteredUsers = [];
 let messages = [];
 
 io.on('connection', (socket) => {
@@ -23,16 +23,23 @@ io.on('connection', (socket) => {
     socket.on('join', (data) => {
         let nickname = typeof data === 'string' ? data : (data ? data.nickname : '');
         let requestedAdmin = data && data.isAdmin;
+        let requestedOwner = data && data.isOwner;
 
         if (!nickname || typeof nickname !== 'string' || !nickname.trim()) return;
 
         socket.nickname = nickname.trim();
-        if (requestedAdmin) {
+        
+        if (requestedOwner) {
+            socket.isOwner = true;
+            socket.isAdmin = true;
+            socket.role = 'בעלים';
+        } else if (requestedAdmin) {
             socket.isAdmin = true;
             socket.role = 'מנהל';
         } else {
             socket.role = socket.role || null;
             socket.isAdmin = socket.isAdmin || false;
+            socket.isOwner = false;
         }
 
         const existingUserIndex = users.findIndex(u => u.id === socket.id);
@@ -40,25 +47,29 @@ io.on('connection', (socket) => {
             users[existingUserIndex].nickname = socket.nickname;
             users[existingUserIndex].role = socket.role;
             users[existingUserIndex].isAdmin = socket.isAdmin;
+            users[existingUserIndex].isOwner = socket.isOwner;
         } else {
             users.push({
                 id: socket.id,
                 nickname: socket.nickname,
                 role: socket.role,
-                isAdmin: socket.isAdmin
+                isAdmin: socket.isAdmin,
+                isOwner: socket.isOwner
             });
         }
 
-        // הוספה לרשימת כל המשתמשים שנרשמו אי פעם
         const regIndex = allRegisteredUsers.findIndex(u => u.nickname === socket.nickname);
         if (regIndex !== -1) {
             allRegisteredUsers[regIndex].online = true;
             allRegisteredUsers[regIndex].id = socket.id;
+            if (socket.isOwner) allRegisteredUsers[regIndex].isOwner = true;
         } else {
             allRegisteredUsers.push({
                 id: socket.id,
                 nickname: socket.nickname,
                 role: socket.role,
+                isAdmin: socket.isAdmin,
+                isOwner: socket.isOwner,
                 online: true
             });
         }
@@ -70,22 +81,26 @@ io.on('connection', (socket) => {
     socket.on('verify-admin', (password) => {
         if (password === ADMIN_PASSWORD) {
             socket.isAdmin = true;
-            socket.role = 'מנהל';
+            socket.isOwner = true; // מי שנכנס עם הסיסמה הראשית הוא הבעלים
+            socket.role = 'בעלים';
 
             const user = users.find(u => u.id === socket.id);
             if (user) {
                 user.isAdmin = true;
-                user.role = 'מנהל';
+                user.isOwner = true;
+                user.role = 'בעלים';
             }
             const regUser = allRegisteredUsers.find(u => u.nickname === socket.nickname);
             if (regUser) {
-                regUser.role = 'מנהל';
+                regUser.isAdmin = true;
+                regUser.isOwner = true;
+                regUser.role = 'בעלים';
             }
 
-            socket.emit('admin-success', true);
+            socket.emit('admin-success', { success: true, isOwner: true });
             updateUserList();
         } else {
-            socket.emit('admin-success', false);
+            socket.emit('admin-success', { success: false });
         }
     });
 
@@ -131,7 +146,6 @@ io.on('connection', (socket) => {
         const user = users.find(u => u.id === socket.id);
         if (user) user.nickname = newName;
 
-        // עדכון ברשימת כל המשתמשים
         const regUser = allRegisteredUsers.find(u => u.nickname === oldName);
         if (regUser) {
             regUser.nickname = newName;
@@ -152,19 +166,29 @@ io.on('connection', (socket) => {
     socket.on('set-role', (data) => {
         if (!socket.isAdmin) return;
 
+        // רק הבעלים יכול להסיר ניהול ממנהל אחר
+        if (data.role === null && !socket.isOwner) {
+            return; // מנהל רגיל לא יכול להוריד ניהול
+        }
+
         const targetUser = users.find(u => u.id === data.targetId);
         if (targetUser) {
             targetUser.role = data.role;
+            targetUser.isAdmin = (data.role === 'מנהל');
+            
             const targetSocket = io.sockets.sockets.get(data.targetId);
             if (targetSocket) {
                 targetSocket.role = data.role;
-                if (data.role === 'מנהל') targetSocket.isAdmin = true;
+                targetSocket.isAdmin = (data.role === 'מנהל');
             }
         }
+        
         const regUser = allRegisteredUsers.find(u => u.id === data.targetId);
         if (regUser) {
             regUser.role = data.role;
+            regUser.isAdmin = (data.role === 'מנהל');
         }
+
         updateUserList();
     });
 
@@ -181,7 +205,6 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         users = users.filter(u => u.id !== socket.id);
         
-        // עדכון סטטוס לא מקוון ברשימת כל המשתמשים
         const regUser = allRegisteredUsers.find(u => u.id === socket.id);
         if (regUser) {
             regUser.online = false;
@@ -192,7 +215,6 @@ io.on('connection', (socket) => {
 });
 
 function updateUserList() {
-    // שולחים למנהלים את כל מי שנרשם אי פעם (allRegisteredUsers)
     io.emit('update-users', { activeUsers: users, allUsers: allRegisteredUsers });
 }
 
