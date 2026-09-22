@@ -168,7 +168,6 @@
         }
         .msg-menu button:hover { background: #f0f2f5; }
 
-        /* סגנון הקלדה בועה בסגנון וואטסאפ */
         #typing-indicator {
             padding: 8px 12px;
             background: white;
@@ -362,7 +361,6 @@
             </div>
 
             <div id="chat-messages">
-                <!-- חיווי הקלדה -->
                 <div id="typing-indicator">
                     <span id="typing-text" style="font-size: 12px; color: #65676b;">מישהו מקליד</span>
                     <div class="typing-dot"></div>
@@ -411,7 +409,6 @@
         let audioChunks = [];
         let isRecording = false;
 
-        // בקשת הרשאת התראות בדפדפן
         if ("Notification" in window && Notification.permission !== "granted") {
             Notification.requestPermission();
         }
@@ -451,7 +448,6 @@
             userDisplay.innerText = `מחובר כ: ${currentNickname}`;
         }
 
-        // שליחת איתות הקלדה לשרת
         chatInput.addEventListener('input', () => {
             socket.emit('typing', { nickname: currentNickname });
             clearTimeout(typingTimeout);
@@ -470,7 +466,6 @@
             }
         });
 
-        // שליחת הודעת טקסט
         chatForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const text = chatInput.value.trim();
@@ -481,7 +476,6 @@
             }
         });
 
-        // הקלטה קולית
         micBtn.addEventListener('click', async () => {
             if (!isRecording) {
                 try {
@@ -616,11 +610,9 @@
                 </div>
             `;
             
-            // מכניסים לפני אלמנט ההקלדה כדי שההקלדה תמיד תישאר למטה
             chatMessages.insertBefore(div, typingIndicator);
             chatMessages.scrollTop = chatMessages.scrollHeight;
 
-            // הפעלת התראות מערכת ברקע
             if (notify && data.nickname !== currentNickname) {
                 document.title = "💬 הודעה חדשה!";
                 if ("Notification" in window && Notification.permission === "granted") {
@@ -678,18 +670,12 @@
             }
         });
 
-        // עדכון תפריט צד (כולל "נראה לאחרונה" סודי למנהלים)
+        // עדכון רשימת כל המשתמשים שהתחברו אי פעם לפאנל המנהלים הסודי
         socket.on('update-users', (data) => {
-            const activeUsers = data.activeUsers;
-            const me = activeUsers.find(u => u.id === socket.id);
-            if (me && me.isAdmin) {
-                isUserAdmin = true;
-                localStorage.setItem('chat_is_admin', 'true');
-            }
-
             if (isUserAdmin) {
                 sidebarTitle.innerText = "ניהול משתמשים (סודי)";
                 sidebarContent.innerHTML = '<button class="clear-chat-btn" onclick="clearAllMessages()">🧹 נקה את כל הצ\'אט</button>';
+                
                 data.allUsers.forEach(user => {
                     if (user.nickname !== currentNickname) {
                         const item = document.createElement('div');
