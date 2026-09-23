@@ -381,6 +381,17 @@
     <script>
         const socket = io();
 
+        // רישום Service Worker להתראות ברקע כמו בוואטסאפ
+        if ('serviceWorker' in navigator && 'Notification' in window) {
+            navigator.serviceWorker.register('/sw.js').catch(err => {
+                console.log('שגיאה ברישום Service Worker:', err);
+            });
+
+            if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+                Notification.requestPermission();
+            }
+        }
+
         const loginScreen = document.getElementById('login-screen');
         const chatScreen = document.getElementById('chat-screen');
         const nicknameInput = document.getElementById('nickname-input');
@@ -408,10 +419,6 @@
         let mediaRecorder;
         let audioChunks = [];
         let isRecording = false;
-
-        if ("Notification" in window && Notification.permission !== "granted") {
-            Notification.requestPermission();
-        }
 
         window.addEventListener('focus', () => {
             document.title = originalTitle;
@@ -520,10 +527,10 @@
         menuToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
         closeSidebar.addEventListener('click', () => sidebar.classList.remove('open'));
 
-        // מנגנון דאבל-קליק פתוח רק כל עוד המשתמש עדיין לא מנהל
+        // דאבל-קליק לכותרת - פועל רק אם המשתמש עדיין אינו מנהל
         let lastClickTime = 0;
         chatTitle.addEventListener('click', () => {
-            if (isUserAdmin) return; // אם כבר הזין את הקוד והפך למנהל - לא יעשה כלום יותר!
+            if (isUserAdmin) return;
             let currentTime = new Date().getTime();
             if (currentTime - lastClickTime < 400) {
                 let password = prompt('הכנס סיסמת מנהל:');
@@ -671,7 +678,6 @@
             }
         });
 
-        // עדכון רשימת כל המשתמשים שהתחברו אי פעם לפאנל המנהלים הסודי
         socket.on('update-users', (data) => {
             if (isUserAdmin) {
                 sidebarTitle.innerText = "ניהול משתמשים (סודי)";
