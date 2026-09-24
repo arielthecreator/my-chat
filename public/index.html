@@ -120,79 +120,6 @@
             margin-right: 5px;
             font-weight: bold;
         }
-        .msg-footer {
-            display: flex;
-            justify-content: flex-end;
-            align-items: center;
-            gap: 5px;
-            font-size: 11px;
-            color: #888;
-            margin-top: 4px;
-        }
-        .ticks {
-            font-weight: bold;
-            color: #999;
-            font-size: 13px;
-        }
-        .ticks.read {
-            color: #34b7f1;
-        }
-        .msg-options {
-            position: absolute;
-            top: 5px;
-            left: 10px;
-            cursor: pointer;
-            font-weight: bold;
-            color: #888;
-        }
-        .msg-menu {
-            display: none;
-            position: absolute;
-            left: 10px;
-            top: 25px;
-            background: white;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            z-index: 10;
-        }
-        .msg-menu button {
-            display: block;
-            background: none;
-            border: none;
-            padding: 5px 12px;
-            text-align: right;
-            width: 100%;
-            cursor: pointer;
-            font-size: 13px;
-        }
-        .msg-menu button:hover { background: #f0f2f5; }
-
-        #typing-indicator {
-            padding: 8px 12px;
-            background: white;
-            border-radius: 15px;
-            align-self: flex-start;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-            display: none;
-            align-items: center;
-            gap: 4px;
-            margin-bottom: 5px;
-        }
-        .typing-dot {
-            width: 7px;
-            height: 7px;
-            background-color: #90949c;
-            border-radius: 50%;
-            animation: bounce 1.4s infinite ease-in-out both;
-        }
-        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
-        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
-        @keyframes bounce {
-            0%, 80%, 100% { transform: scale(0); }
-            40% { transform: scale(1.0); }
-        }
-
         #chat-form {
             display: flex;
             align-items: center;
@@ -216,40 +143,11 @@
             border-radius: 5px;
             cursor: pointer;
         }
-        #mic-btn {
-            background-color: #e4e6eb;
-            color: #333;
-            font-size: 18px;
-            border-radius: 50%;
-            width: 42px;
-            height: 42px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: none;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        #mic-btn.recording {
-            background-color: #e53935;
-            color: white;
-            animation: pulse 1.2s infinite;
-        }
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
-        }
-        audio {
-            max-width: 100%;
-            height: 35px;
-            margin-top: 5px;
-        }
         #sidebar {
             position: absolute;
             top: 0;
-            right: -250px;
-            width: 250px;
+            right: -280px;
+            width: 280px;
             height: 100%;
             background: white;
             box-shadow: -2px 0 5px rgba(0,0,0,0.2);
@@ -269,50 +167,28 @@
             padding-bottom: 10px;
             margin-bottom: 10px;
         }
-        .user-mgmt-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 13px;
-            margin-bottom: 8px;
-            background: #f9f9f9;
-            padding: 6px;
-            border-radius: 4px;
-        }
-        .user-info-area {
-            display: flex;
-            flex-direction: column;
-        }
-        .online-status { font-size: 11px; color: #4caf50; font-weight: bold; }
-        .offline-status { font-size: 11px; color: #888; }
-        .user-mgmt-btns button {
-            font-size: 11px;
-            padding: 3px 6px;
-            margin-right: 2px;
-            cursor: pointer;
-            border: none;
-            border-radius: 3px;
-        }
-        .btn-admin { background: #4caf50; color: white; }
-        .btn-kick { background: #e53935; color: white; }
-        .clear-chat-btn {
-            background-color: #ff9800;
+        .menu-action-btn {
+            background-color: #0084ff;
             color: white;
             border: none;
             padding: 8px;
             border-radius: 5px;
             cursor: pointer;
-            margin-bottom: 8px;
             font-weight: bold;
             font-size: 13px;
             width: 100%;
+            margin-bottom: 8px;
         }
-        .edit-nick-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 14px;
-            margin-right: 5px;
+        .room-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            margin-bottom: 8px;
+            background: #f9f9f9;
+            padding: 6px;
+            border-radius: 4px;
+            gap: 5px;
         }
         .leave-btn {
             background-color: #e53935;
@@ -346,7 +222,6 @@
                 <h3 id="chat-title">צ'אט קבוצתי</h3>
                 <div>
                     <span id="user-display" style="font-size: 13px;"></span>
-                    <button class="edit-nick-btn" onclick="changeNickname()" title="שנה כינוי">✏️</button>
                 </div>
             </header>
 
@@ -361,17 +236,11 @@
             </div>
 
             <div id="chat-messages">
-                <div id="typing-indicator">
-                    <span id="typing-text" style="font-size: 12px; color: #65676b;">מישהו מקליד</span>
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                </div>
+                <div id="typing-indicator" style="display:none; padding:8px; font-size:12px; color:#65676b;">מישהו מקליד...</div>
             </div>
 
             <form id="chat-form">
                 <input type="text" id="chat-input" placeholder="כתוב הודעה..." autocomplete="off">
-                <button type="button" id="mic-btn" title="הקלט הודעה קולית">🎤</button>
                 <button type="submit">שלח</button>
             </form>
         </div>
@@ -381,17 +250,6 @@
     <script>
         const socket = io();
 
-        // רישום Service Worker להתראות ברקע כמו בוואטסאפ
-        if ('serviceWorker' in navigator && 'Notification' in window) {
-            navigator.serviceWorker.register('/sw.js').catch(err => {
-                console.log('שגיאה ברישום Service Worker:', err);
-            });
-
-            if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
-                Notification.requestPermission();
-            }
-        }
-
         const loginScreen = document.getElementById('login-screen');
         const chatScreen = document.getElementById('chat-screen');
         const nicknameInput = document.getElementById('nickname-input');
@@ -400,9 +258,6 @@
         const chatInput = document.getElementById('chat-input');
         const chatMessages = document.getElementById('chat-messages');
         const userDisplay = document.getElementById('user-display');
-        const micBtn = document.getElementById('mic-btn');
-        const typingIndicator = document.getElementById('typing-indicator');
-        const typingText = document.getElementById('typing-text');
         
         const menuToggle = document.getElementById('menu-toggle');
         const sidebar = document.getElementById('sidebar');
@@ -413,19 +268,9 @@
 
         let currentNickname = localStorage.getItem('chat_nickname') || '';
         let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
-        let originalTitle = document.title;
-        let typingTimeout;
-        
-        let mediaRecorder;
-        let audioChunks = [];
-        let isRecording = false;
-
-        window.addEventListener('focus', () => {
-            document.title = originalTitle;
-            if (currentNickname) {
-                socket.emit('mark-as-read');
-            }
-        });
+        let currentRoomId = 'public';
+        let globalUsers = [];
+        let globalRooms = {};
 
         if (currentNickname) {
             nicknameInput.value = currentNickname;
@@ -435,18 +280,11 @@
 
         loginBtn.addEventListener('click', () => {
             const nick = nicknameInput.value.trim();
-            if (!nick) {
-                alert('אנא הכנס כינוי תקין');
-                return;
-            }
+            if (!nick) { alert('אנא הכנס כינוי תקין'); return; }
             currentNickname = nick;
             localStorage.setItem('chat_nickname', currentNickname);
             socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
             startChatSession();
-        });
-
-        nicknameInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') loginBtn.click();
         });
 
         function startChatSession() {
@@ -455,88 +293,25 @@
             userDisplay.innerText = `מחובר כ: ${currentNickname}`;
         }
 
-        chatInput.addEventListener('input', () => {
-            socket.emit('typing', { nickname: currentNickname });
-            clearTimeout(typingTimeout);
-            typingTimeout = setTimeout(() => {
-                socket.emit('typing', { nickname: '' });
-            }, 1000);
-        });
-
-        socket.on('display-typing', (data) => {
-            if (data.nickname && data.nickname !== currentNickname) {
-                typingText.innerText = `${data.nickname} מקליד/ה`;
-                typingIndicator.style.display = 'flex';
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-            } else {
-                typingIndicator.style.display = 'none';
-            }
-        });
-
         chatForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const text = chatInput.value.trim();
             if (text !== '') {
                 socket.emit('chat-message', { nickname: currentNickname, text: text, type: 'text' });
                 chatInput.value = '';
-                socket.emit('typing', { nickname: '' });
-            }
-        });
-
-        micBtn.addEventListener('click', async () => {
-            if (!isRecording) {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    mediaRecorder = new MediaRecorder(stream);
-                    audioChunks = [];
-
-                    mediaRecorder.ondataavailable = event => {
-                        audioChunks.push(event.data);
-                    };
-
-                    mediaRecorder.onstop = () => {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                        const reader = new FileReader();
-                        reader.readAsDataURL(audioBlob);
-                        reader.onloadend = () => {
-                            const base64Audio = reader.result;
-                            socket.emit('chat-message', { 
-                                nickname: currentNickname, 
-                                text: base64Audio, 
-                                type: 'audio' 
-                            });
-                        };
-                        stream.getTracks().forEach(track => track.stop());
-                    };
-
-                    mediaRecorder.start();
-                    isRecording = true;
-                    micBtn.classList.add('recording');
-                    micBtn.innerText = '⏹';
-                } catch (err) {
-                    alert('לא ניתן לגשת למיקרופון.');
-                }
-            } else {
-                mediaRecorder.stop();
-                isRecording = false;
-                micBtn.classList.remove('recording');
-                micBtn.innerText = '🎤';
             }
         });
 
         menuToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
         closeSidebar.addEventListener('click', () => sidebar.classList.remove('open'));
 
-        // דאבל-קליק לכותרת - פועל רק אם המשתמש עדיין אינו מנהל
         let lastClickTime = 0;
         chatTitle.addEventListener('click', () => {
             if (isUserAdmin) return;
             let currentTime = new Date().getTime();
             if (currentTime - lastClickTime < 400) {
                 let password = prompt('הכנס סיסמת מנהל:');
-                if (password !== null) {
-                    socket.emit('verify-admin', password.trim());
-                }
+                if (password !== null) socket.emit('verify-admin', password.trim());
             }
             lastClickTime = currentTime;
         });
@@ -552,186 +327,159 @@
             }
         });
 
+        function openCreatePrivateRoomModal() {
+            let roomName = prompt('איך אתה רוצה לקרוא לצ\'אט האישי?');
+            if (!roomName || !roomName.trim()) return;
+
+            let availableUsers = globalUsers.filter(u => u.nickname !== currentNickname).map(u => u.nickname);
+            if (availableUsers.length === 0) {
+                alert('אין משתמשים אחרים זמינים לצרף כרגע.');
+                return;
+            }
+
+            let target = prompt('בחר את מי לצרף מרשימת המשתמשים הבאה:\n' + availableUsers.join(', '));
+            if (!target || !availableUsers.includes(target.trim())) {
+                alert('שם משתמש לא תקין.');
+                return;
+            }
+
+            socket.emit('create-private-room', { roomName: roomName.trim(), targetNickname: target.trim() });
+        }
+
+        socket.on('room-created', (roomId) => {
+            switchToRoom(roomId, 'צ\'אט אישי');
+        });
+
+        function switchToRoom(roomId, roomTitle) {
+            currentRoomId = roomId;
+            chatTitle.innerText = roomTitle;
+            sidebar.classList.remove('open');
+            socket.emit('switch-room', roomId);
+        }
+
+        // אם המנהל חסמ/מחק את הצ'אט בזמן שהמשתמש בפנים
+        socket.on('room-deleted-by-admin', (roomId) => {
+            if (currentRoomId === roomId) {
+                alert('הצ\'אט האישי הזה נחסם והוסר על ידי המנהל.');
+                switchToRoom('public', 'צ\'אט קבוצתי');
+            }
+        });
+
         socket.on('load-messages', (msgs) => {
             chatMessages.querySelectorAll('.message').forEach(m => m.remove());
             msgs.forEach(data => {
-                if (data.system) {
-                    appendSystemMessage(data.text);
-                } else {
-                    appendChatMessage(data, false);
-                }
+                if (data.system) appendSystemMessage(data.text);
+                else appendChatMessage(data);
             });
             socket.emit('mark-as-read');
         });
 
         socket.on('new-message', (data) => {
-            appendChatMessage(data, true);
+            appendChatMessage(data);
             socket.emit('mark-as-read');
         });
 
-        socket.on('update-messages-status', (msgs) => {
-            msgs.forEach(data => {
-                const div = document.getElementById(data.id);
-                if (div) {
-                    const ticksEl = div.querySelector('.ticks');
-                    if (ticksEl && data.readBy.length > 1) {
-                        ticksEl.innerText = '✓✓';
-                        ticksEl.classList.add('read');
-                    }
-                }
-            });
-        });
-
-        function clearAllMessages() {
-            if (confirm('האם אתה בטוח שברצונך לנקות את כל הצ\'אט?')) {
-                socket.emit('clear-chat');
-            }
-        }
-
-        socket.on('chat-cleared', () => {
-            chatMessages.querySelectorAll('.message').forEach(m => m.remove());
-            alert('הצ\'אט נוקה בהצלחה.');
-        });
-
-        function appendChatMessage(data, notify) {
+        function appendChatMessage(data) {
             const div = document.createElement('div');
             div.className = 'message';
             div.id = data.id;
-
             let badgeHtml = data.role ? `<span class="badge">${data.role}</span>` : '';
-            let canEdit = (data.nickname === currentNickname) && (data.type === 'text') || isUserAdmin;
-
-            let isRead = data.readBy && data.readBy.length > 1;
-            let ticksClass = isRead ? 'ticks read' : 'ticks';
-
-            let contentHtml = data.type === 'audio' ? `<audio controls src="${data.text}"></audio>` : `<span class="msg-text">${data.text}</span>`;
-
-            div.innerHTML = `
-                ${canEdit ? '<span class="msg-options" onclick="toggleMsgMenu(this)">⋮</span>' : ''}
-                <div class="msg-menu">
-                    <button onclick="editMsg('${data.id}')">ערוך הודעה</button>
-                </div>
-                <strong>${badgeHtml}${data.nickname}:</strong> ${contentHtml}
-                <div class="msg-footer">
-                    <span class="msg-time">${data.time || ''}</span>
-                    <span class="${ticksClass}">✓✓</span>
-                </div>
-            `;
-            
-            chatMessages.insertBefore(div, typingIndicator);
+            div.innerHTML = `<strong>${badgeHtml}${data.nickname}:</strong> <span>${data.text}</span>`;
+            chatMessages.appendChild(div);
             chatMessages.scrollTop = chatMessages.scrollHeight;
-
-            if (notify && data.nickname !== currentNickname) {
-                document.title = "💬 הודעה חדשה!";
-                if ("Notification" in window && Notification.permission === "granted") {
-                    try {
-                        navigator.serviceWorker.ready.then(registration => {
-                            registration.showNotification(data.nickname, {
-                                body: data.type === 'audio' ? '🎤 [הודעה קולית]' : data.text,
-                                icon: "https://cdn-icons-png.flaticon.com/512/1041/1041916.png"
-                            });
-                        }).catch(() => {
-                            new Notification(data.nickname, {
-                                body: data.type === 'audio' ? '🎤 [הודעה קולית]' : data.text,
-                                icon: "https://cdn-icons-png.flaticon.com/512/1041/1041916.png"
-                            });
-                        });
-                    } catch (e) {
-                        new Notification(data.nickname, {
-                            body: data.type === 'audio' ? '🎤 [הודעה קולית]' : data.text
-                        });
-                    }
-                }
-            }
         }
 
         function appendSystemMessage(text) {
             const div = document.createElement('div');
             div.className = 'message system';
             div.innerText = text;
-            chatMessages.insertBefore(div, typingIndicator);
+            chatMessages.appendChild(div);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
-        function toggleMsgMenu(el) {
-            const menu = el.nextElementSibling;
-            document.querySelectorAll('.msg-menu').forEach(m => { if(m !== menu) m.style.display = 'none'; });
-            menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
-        }
+        socket.on('update-data', (data) => {
+            globalUsers = data.allUsers;
+            globalRooms = data.privateRooms;
 
-        function editMsg(id) {
-            const msgDiv = document.getElementById(id);
-            const textSpan = msgDiv.querySelector('.msg-text');
-            if (!textSpan) return;
-            const newText = prompt('ערוך הודעה:', textSpan.innerText);
-            if (newText !== null && newText.trim() !== '') {
-                socket.emit('edit-message', { id: id, newText: newText.trim() });
+            sidebarContent.innerHTML = '';
+
+            // כפתור חזרה לכללי תמיד זמין בתפריט למי שנמצא בחדר פרטי
+            if (currentRoomId !== 'public') {
+                const backToPublicBtn = document.createElement('button');
+                backToPublicBtn.className = 'menu-action-btn';
+                backToPublicBtn.style.backgroundColor = '#607d8b';
+                backToPublicBtn.innerText = '⬅️ חזרה לצ\'אט הראשי';
+                backToPublicBtn.onclick = () => switchToRoom('public', 'צ\'אט קבוצתי');
+                sidebarContent.appendChild(backToPublicBtn);
             }
-            msgDiv.querySelector('.msg-menu').style.display = 'none';
-        }
 
-        socket.on('message-edited', (data) => {
-            const msgDiv = document.getElementById(data.id);
-            if (msgDiv) {
-                const textSpan = msgDiv.querySelector('.msg-text');
-                if (textSpan) textSpan.innerText = data.newText;
-            }
-        });
-
-        socket.on('update-users', (data) => {
             if (isUserAdmin) {
-                sidebarTitle.innerText = "ניהול משתמשים (סודי)";
-                sidebarContent.innerHTML = '<button class="clear-chat-btn" onclick="clearAllMessages()">🧹 נקה את כל הצ\'אט</button>';
+                sidebarTitle.innerText = "ניהול סודי (הכל)";
                 
-                data.allUsers.forEach(user => {
-                    if (user.nickname !== currentNickname) {
-                        const item = document.createElement('div');
-                        item.className = 'user-mgmt-item';
-                        let roleLabel = user.role ? `(${user.role})` : '';
-                        let statusHtml = user.online 
-                            ? `<span class="online-status">מחובר כעת</span>` 
-                            : `<span class="offline-status">נראה לאחרונה: ${user.lastSeen || 'לא ידוע'}</span>`;
-                        
+                const generalBtn = document.createElement('button');
+                generalBtn.className = 'menu-action-btn';
+                generalBtn.innerText = '💬 חזור לצ\'אט הכללי';
+                generalBtn.onclick = () => switchToRoom('public', 'צ\'אט קבוצתי');
+                sidebarContent.appendChild(generalBtn);
+
+                const roomsTitle = document.createElement('p');
+                roomsTitle.style.cssText = 'font-weight:bold; margin:10px 0 5px 0; font-size:13px; color:#333;';
+                roomsTitle.innerText = 'כל הצ\'אטים הפרטיים שנפתחו:';
+                sidebarContent.appendChild(roomsTitle);
+
+                const roomsKeys = Object.keys(globalRooms);
+                if (roomsKeys.length === 0) {
+                    const noRooms = document.createElement('p');
+                    noRooms.style.cssText = 'font-size:12px; color:#777;';
+                    noRooms.innerText = 'עדיין לא נפתחו צ\'אטים פרטיים.';
+                    sidebarContent.appendChild(noRooms);
+                } else {
+                    roomsKeys.forEach(rId => {
+                        let room = globalRooms[rId];
+                        let item = document.createElement('div');
+                        item.className = 'room-item';
                         item.innerHTML = `
-                            <div class="user-info-area">
-                                <strong style="font-size:14px;">${user.nickname} ${roleLabel}</strong>
-                                ${statusHtml}
-                            </div>
-                            <div class="user-mgmt-btns">
-                                <button class="btn-admin" onclick="promptRole('${user.id}')">הגדר מנהל</button>
-                                ${user.online ? `<button class="btn-kick" onclick="kickUser('${user.id}')">הסר</button>` : ''}
-                            </div>
+                            <span style="flex:1;"><strong>${room.name}</strong><br><small>${room.members.join(', ')}</small></span>
+                            <button style="background:#4caf50;color:white;border:none;padding:4px 6px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('${rId}', '${room.name} (צפייה)')">היכנס</button>
+                            <button style="background:#e53935;color:white;border:none;padding:4px 6px;border-radius:3px;cursor:pointer;" onclick="deleteRoom('${rId}')">חסום</button>
                         `;
                         sidebarContent.appendChild(item);
-                    }
-                });
+                    });
+                }
+
             } else {
                 sidebarTitle.innerText = "תפריט קבוצה";
-                sidebarContent.innerHTML = '<p style="font-size: 14px; color: #666; text-align: center; margin-top: 20px;">ברוך הבא לצ\'אט הקבוצתי!</p>';
+
+                const privBtn = document.createElement('button');
+                privBtn.className = 'menu-action-btn';
+                privBtn.innerText = '➕ פתח צ\'אט אישי חדש';
+                privBtn.onclick = openCreatePrivateRoomModal;
+                sidebarContent.appendChild(privBtn);
+
+                const myRooms = Object.keys(globalRooms).filter(rId => globalRooms[rId].members.includes(currentNickname));
+                if (myRooms.length > 0) {
+                    const myRoomsTitle = document.createElement('p');
+                    myRoomsTitle.style.cssText = 'font-weight:bold; margin:10px 0 5px 0; font-size:13px;';
+                    myRoomsTitle.innerText = 'הצ\'אטים האישיים שלי:';
+                    sidebarContent.appendChild(myRoomsTitle);
+
+                    myRooms.forEach(rId => {
+                        let room = globalRooms[rId];
+                        let item = document.createElement('div');
+                        item.className = 'room-item';
+                        item.innerHTML = `
+                            <span style="flex:1;">${room.name}</span>
+                            <button style="background:#0084ff;color:white;border:none;padding:5px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('${rId}', '${room.name}')">הכנס</button>
+                        `;
+                        sidebarContent.appendChild(item);
+                    });
+                }
             }
         });
 
-        function promptRole(targetId) {
-            let choice = prompt('הקלד "מנהל" כדי להוסיף תפקיד, או השאר ריק / כתוב "הסרה" כדי להסיר:');
-            if (choice !== null) {
-                let role = choice.trim() === 'מנהל' ? 'מנהל' : null;
-                socket.emit('set-role', { targetId: targetId, role: role });
-            }
-        }
-
-        function kickUser(targetId) {
-            if (confirm('להסיר את המשתמש מהצ\'אט?')) {
-                socket.emit('kick-user', targetId);
-            }
-        }
-
-        function changeNickname() {
-            const newNick = prompt('הכנס כינוי חדש:', currentNickname);
-            if (newNick && newNick.trim() !== '' && newNick.trim() !== currentNickname) {
-                currentNickname = newNick.trim();
-                localStorage.setItem('chat_nickname', currentNickname);
-                userDisplay.innerText = `מחובר כ: ${currentNickname}`;
-                socket.emit('change-nickname', { newNickname: currentNickname });
+        function deleteRoom(roomId) {
+            if (confirm('האם אתה בטוח שברצונך לחסום ולמחוק את הצ\'אט הזה לצמיתות?')) {
+                socket.emit('delete-private-room', roomId);
             }
         }
 
@@ -742,13 +490,6 @@
                 window.location.reload();
             }
         }
-
-        socket.on('kicked', () => {
-            alert('הוסרת מהקבוצה על ידי המנהל.');
-            localStorage.removeItem('chat_nickname');
-            localStorage.removeItem('chat_is_admin');
-            window.location.reload();
-        });
     </script>
 </body>
 </html>
