@@ -11,8 +11,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const ADMIN_PASSWORD = '123';
 let publicMessages = [];
-let allUsers = [];
-let privateRooms = {};
+let allUsers = [];       // רשימת כל המשתמשים שהתחברו אי פעם
+let privateRooms = {};   // רשימת כל הצ'אטים הפרטיים
 
 function getJerusalemTime() {
     return new Date().toLocaleTimeString('he-IL', { 
@@ -91,7 +91,7 @@ io.on('connection', (socket) => {
         updateUsersAndRoomsList();
     });
 
-    // מחיקת צ'אט פרטי על ידי מנהל
+    // מחיקת/חסימת צ'אט פרטי על ידי מנהל
     socket.on('delete-private-room', (roomId) => {
         if (currentUser && currentUser.isAdmin && privateRooms[roomId]) {
             io.to(roomId).emit('room-deleted-by-admin', roomId);
@@ -148,6 +148,22 @@ io.on('connection', (socket) => {
             updateUsersAndRoomsList();
         } else {
             socket.emit('admin-success', false);
+        }
+    });
+
+    socket.on('set-role', (data) => {
+        if (currentUser && currentUser.isAdmin) {
+            const target = allUsers.find(u => u.id === data.targetId);
+            if (target) {
+                target.role = data.role;
+                updateUsersAndRoomsList();
+            }
+        }
+    });
+
+    socket.on('kick-user', (targetId) => {
+        if (currentUser && currentUser.isAdmin) {
+            io.to(targetId).emit('kicked');
         }
     });
 
