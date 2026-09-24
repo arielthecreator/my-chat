@@ -90,6 +90,17 @@ io.on('connection', (socket) => {
                 return;
             }
 
+            // בדיקה אם כבר קיים חדר אישי בין השניים
+            let existingRoomId = Object.keys(privateRooms).find(rId => {
+                let r = privateRooms[rId];
+                return r.members.includes(currentUser.nickname) && r.members.includes(targetUser.nickname);
+            });
+
+            if (existingRoomId) {
+                socket.emit('room-created', existingRoomId);
+                return;
+            }
+
             const roomId = 'room_' + Date.now();
             privateRooms[roomId] = {
                 name: roomName,
@@ -107,10 +118,14 @@ io.on('connection', (socket) => {
 
     socket.on('delete-private-room', (roomId) => {
         try {
-            if (currentUser && currentUser.isAdmin && privateRooms[roomId]) {
-                io.to(roomId).emit('room-deleted-by-admin', roomId);
-                delete privateRooms[roomId];
-                updateUsersAndRoomsList();
+            if (privateRooms[roomId]) {
+                let room = privateRooms[roomId];
+                // מותר למחוק אם אתה מנהל או אם אתה חבר בחדר האישי
+                if ((currentUser && currentUser.isAdmin) || (currentUser && room.members.includes(currentUser.nickname))) {
+                    io.to(roomId).emit('room-deleted-by-admin', roomId);
+                    delete privateRooms[roomId];
+                    updateUsersAndRoomsList();
+                }
             }
         } catch (err) {
             console.error('Error in delete-private-room:', err);
@@ -143,6 +158,12 @@ io.on('connection', (socket) => {
         } catch (err) {
             console.error('Error in chat-message:', err);
         }
+    });
+
+    // חיווי הקלדה
+    socket.on('typing', (isTyping) => {
+        if (!currentUser) return;
+        socket.to(currentRoom).emit('user-typing', { nickname: currentUser.nickname, isTyping });
     });
 
     socket.on('edit-message', (data) => {
@@ -265,7 +286,6 @@ io.on('connection', (socket) => {
     }
 });
 
-// הגנה קריטית: מונעת מהשרת לקרוס לחלוטין אם יש שגיאה לא מטופלת
 process.on('uncaughtException', (err) => {
     console.error('Caught exception: ', err);
 });
