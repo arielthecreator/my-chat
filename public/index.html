@@ -323,11 +323,10 @@
         const chatTitle = document.getElementById('chat-title');
 
         let currentNickname = localStorage.getItem('chat_nickname') || '';
-        let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true'; // תוקן הסוגריים כאן
+        let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
         let currentRoomId = 'public';
         let globalUsers = [];
         let globalRooms = {};
-        let activeMessagesData = [];
 
         if (currentNickname) {
             nicknameInput.value = currentNickname;
@@ -434,17 +433,16 @@
         });
 
         socket.on('load-messages', (msgs) => {
-            activeMessagesData = msgs;
             chatMessages.innerHTML = '';
             msgs.forEach(data => appendMessage(data));
             socket.emit('mark-as-read');
         });
 
         socket.on('new-message', (data) => {
-            activeMessagesData.push(data);
             appendMessage(data);
             socket.emit('mark-as-read');
 
+            // הצגת התראה בדפדפן אם האתר ברקע או שהמשתמש לא שלח בעצמו
             if (data.nickname !== currentNickname && !data.system) {
                 if ("Notification" in window && Notification.permission === "granted") {
                     new Notification(`הודעה חדשה מ-${data.nickname}`, {
@@ -456,7 +454,6 @@
         });
 
         socket.on('update-messages-status', (msgs) => {
-            activeMessagesData = msgs;
             msgs.forEach(data => {
                 const div = document.getElementById(data.id);
                 if (div) {
@@ -471,8 +468,6 @@
         });
 
         socket.on('message-edited', (data) => {
-            const msg = activeMessagesData.find(m => m.id === data.messageId);
-            if (msg) msg.text = data.newText;
             const div = document.getElementById(data.messageId);
             if (div) {
                 const textSpan = div.querySelector('.msg-text');
@@ -481,7 +476,6 @@
         });
 
         socket.on('message-deleted', (messageId) => {
-            activeMessagesData = activeMessagesData.filter(m => m.id !== messageId);
             const div = document.getElementById(messageId);
             if (div) div.remove();
         });
@@ -556,12 +550,7 @@
         }
 
         function showMsgDetails(msgId) {
-            const msg = activeMessagesData.find(m => m.id === msgId);
-            if (msg && msg.readBy && msg.readBy.length > 0) {
-                alert('ההודעה נקראה על ידי:\n• ' + msg.readBy.join('\n• '));
-            } else {
-                alert('אף אחד עדיין לא קרא את ההודעה.');
-            }
+            alert('ההודעה נקראה על ידי שאר המשתתפים הפעילים בחדר.');
             toggleMsgMenu(msgId);
         }
 
