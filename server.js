@@ -134,6 +134,20 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('delete-message', (messageId) => {
+        let msgs = currentRoom === 'public' ? publicMessages : (privateRooms[currentRoom] ? privateRooms[currentRoom].messages : null);
+        if (msgs) {
+            const index = msgs.findIndex(m => m.id === messageId);
+            if (index !== -1) {
+                const msg = msgs[index];
+                if (currentUser && (currentUser.nickname === msg.nickname || currentUser.isAdmin)) {
+                    msgs.splice(index, 1);
+                    io.to(currentRoom).emit('message-deleted', messageId);
+                }
+            }
+        }
+    });
+
     socket.on('mark-as-read', () => {
         let msgs = currentRoom === 'public' ? publicMessages : (privateRooms[currentRoom] ? privateRooms[currentRoom].messages : null);
         if (msgs) {
