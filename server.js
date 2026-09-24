@@ -97,6 +97,7 @@ io.on('connection', (socket) => {
 
             if (existingRoomId) {
                 socket.emit('room-created', existingRoomId);
+                updateUsersAndRoomsList();
                 return;
             }
 
@@ -139,6 +140,7 @@ io.on('connection', (socket) => {
                 nickname: data.nickname,
                 text: data.text,
                 type: data.type || 'text',
+                replyTo: data.replyTo || null, // שמירת הציטוט אם קיים
                 role: currentUser ? currentUser.role : null,
                 time: time,
                 readBy: currentUser ? [currentUser.nickname] : []
