@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>צ'אט קבוצתי</title>
+    <title>צ'אט קבוצתי מתקדם</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -114,6 +114,7 @@
             position: relative;
             display: flex;
             flex-direction: column;
+            transition: transform 0.2s ease;
         }
         .message.my-message {
             background: #dcf8c6;
@@ -135,6 +136,15 @@
             border-radius: 4px;
             margin-right: 5px;
             font-weight: bold;
+        }
+        .quoted-box {
+            background: rgba(0, 0, 0, 0.05);
+            border-right: 4px solid #0084ff;
+            padding: 5px 8px;
+            margin-bottom: 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #444;
         }
         .msg-footer {
             display: flex;
@@ -159,6 +169,30 @@
         .read-receipt { font-size: 12px; font-weight: bold; }
         .read-receipt.blue { color: #0084ff; }
         .read-receipt.gray { color: gray; }
+
+        /* אזור תצוגה מקדימה לציטוט מעל תיבת הטקסט */
+        #reply-preview-container {
+            display: none;
+            background: #f0f2f5;
+            padding: 8px 15px;
+            border-top: 1px solid #ddd;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+        }
+        #reply-preview-content {
+            border-right: 4px solid #0084ff;
+            padding-right: 8px;
+            flex: 1;
+            color: #333;
+        }
+        #cancel-reply-btn {
+            background: none;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            color: #666;
+        }
 
         /* חץ למטה הודעות חדשות */
         #scroll-bottom-btn {
@@ -225,7 +259,7 @@
             cursor: pointer;
         }
 
-        /* סיידבר מתוקן שלא דורש גלילה ארוכה */
+        /* סיידבר / פאנל ניהול */
         #sidebar {
             position: absolute;
             top: 0;
@@ -257,7 +291,7 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 6px;
         }
         .menu-action-btn {
             background-color: #0084ff;
@@ -276,9 +310,10 @@
             align-items: center;
             font-size: 12px;
             background: #f9f9f9;
-            padding: 6px;
+            padding: 8px;
             border-radius: 4px;
             gap: 4px;
+            border: 1px solid #eee;
         }
         .online-status { color: #4caf50; font-weight: bold; }
         .offline-status { color: #888; }
@@ -304,7 +339,7 @@
             border-radius: 5px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
             z-index: 50;
-            min-width: 120px;
+            min-width: 130px;
         }
         .msg-dropdown button {
             display: block;
@@ -322,6 +357,7 @@
 <body>
 
     <div class="container">
+        <!-- מסך התחברות -->
         <div id="login-screen">
             <h2>ברוכים הבאים לצ'אט</h2>
             <p>בחר כינוי כדי להיכנס לשיחה:</p>
@@ -330,6 +366,7 @@
             <button id="login-btn">הכנס לצ'אט</button>
         </div>
 
+        <!-- מסך צ'אט -->
         <div id="chat-screen">
             <header>
                 <button class="menu-btn" id="menu-toggle">☰</button>
@@ -337,6 +374,7 @@
                 <div><span id="user-display" style="font-size: 13px;"></span></div>
             </header>
 
+            <!-- סיידבר / פאנל מנהלים וצ'אטים -->
             <div id="sidebar">
                 <div class="sidebar-header">
                     <h4 style="margin:0;" id="sidebar-title">תפריט</h4>
@@ -352,6 +390,12 @@
             </div>
 
             <div id="typing-indicator"></div>
+
+            <!-- אזור תצוגה מקדימה להודעה שמצוטטת -->
+            <div id="reply-preview-container">
+                <div id="reply-preview-content"></div>
+                <button id="cancel-reply-btn" onclick="cancelReply()">✕</button>
+            </div>
 
             <form id="chat-form">
                 <input type="text" id="chat-input" placeholder="כתוב הודעה..." autocomplete="off">
@@ -382,6 +426,9 @@
         const sidebarContent = document.getElementById('sidebar-content');
         const sidebarTitle = document.getElementById('sidebar-title');
         const chatTitle = document.getElementById('chat-title');
+        
+        const replyPreviewContainer = document.getElementById('reply-preview-container');
+        const replyPreviewContent = document.getElementById('reply-preview-content');
 
         let currentNickname = localStorage.getItem('chat_nickname') || '';
         let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
@@ -391,6 +438,7 @@
         let activeMessagesData = [];
         let unreadScrolledCount = 0;
         let isUserScrolledUp = false;
+        let currentReplyingTo = null; // אובייקט ההודעה שאליה מגיבים
 
         if (currentNickname) {
             loginScreen.style.display = 'none';
@@ -446,8 +494,14 @@
             e.preventDefault();
             const text = chatInput.value.trim();
             if (text !== '') {
-                socket.emit('chat-message', { nickname: currentNickname, text: text, type: 'text' });
+                socket.emit('chat-message', { 
+                    nickname: currentNickname, 
+                    text: text, 
+                    type: 'text',
+                    replyTo: currentReplyingTo ? { id: currentReplyingTo.id, nickname: currentReplyingTo.nickname, text: currentReplyingTo.text } : null
+                });
                 chatInput.value = '';
+                cancelReply();
                 socket.emit('typing', false);
             }
         });
@@ -455,6 +509,7 @@
         menuToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
         closeSidebar.addEventListener('click', () => sidebar.classList.remove('open'));
 
+        // לחיצה כפולה על כותרת הצ'אט כדי להכניס סיסמת מנהל
         let lastClickTime = 0;
         chatTitle.addEventListener('click', () => {
             if (isUserAdmin) return;
@@ -570,13 +625,25 @@
             let isMyMsg = data.nickname === currentNickname;
             let canDelete = isMyMsg || isUserAdmin;
 
+            // הוספת ציטוט אם קיים בהודעה
+            let quotedHtml = '';
+            if (data.replyTo) {
+                quotedHtml = `
+                    <div class="quoted-box">
+                        <strong>${data.replyTo.nickname}:</strong> ${data.replyTo.text}
+                    </div>
+                `;
+            }
+
             div.innerHTML = `
                 <button class="msg-menu-btn" onclick="toggleMsgMenu('${data.id}')">⋮</button>
                 <div class="msg-dropdown" id="dropdown-${data.id}">
+                    <button onclick="startReply('${data.id}')">השב (ציטוט)</button>
                     ${isMyMsg ? `<button onclick="editMessage('${data.id}')">עריכה</button>` : ''}
                     ${canDelete ? `<button onclick="deleteMessage('${data.id}')" style="color:red;">מחק</button>` : ''}
                     <button onclick="showMsgDetails('${data.id}')">פרטים (מי ראה)</button>
                 </div>
+                ${quotedHtml}
                 <strong>${badgeHtml}${data.nickname}:</strong>
                 <span class="msg-text">${data.text}${data.edited ? ' (נערך)' : ''}</span>
                 <div class="msg-footer">
@@ -584,9 +651,36 @@
                     <span class="read-receipt gray">✓</span>
                 </div>
             `;
+
+            // הוספת איוונט גרירה ימינה (Swipe Right) כמו בוואטסאפ
+            let touchStartX = 0;
+            div.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
+            div.addEventListener('touchend', (e) => {
+                let touchEndX = e.changedTouches[0].clientX;
+                if (touchEndX - touchStartX > 70) { // גרירה ימינה מספיק ארוכה
+                    startReply(data.id);
+                }
+            });
+
             chatMessages.appendChild(div);
             handleScrollAfterAppend(shouldScrollCheck);
             socket.emit('mark-as-read');
+        }
+
+        function startReply(msgId) {
+            const msg = activeMessagesData.find(m => m.id === msgId);
+            if (!msg) return;
+            currentReplyingTo = msg;
+            replyPreviewContent.innerHTML = `<strong>משיב ל-${msg.nickname}:</strong> ${msg.text}`;
+            replyPreviewContainer.style.display = 'flex';
+            chatInput.focus();
+            toggleMsgMenu(msgId);
+        }
+
+        function cancelReply() {
+            currentReplyingTo = null;
+            replyPreviewContainer.style.display = 'none';
+            replyPreviewContent.innerHTML = '';
         }
 
         function handleScrollAfterAppend(shouldScrollCheck) {
@@ -638,11 +732,13 @@
             toggleMsgMenu(msgId);
         }
 
+        // עדכון הפאנל והצ'אטים בסיידבר (כולל פאנל ניהול מלא למנהלים)
         socket.on('update-data', (data) => {
             globalUsers = data.allUsers;
             globalRooms = data.privateRooms;
             sidebarContent.innerHTML = '';
 
+            // כפתור חזרה לצ'אט הראשי אם נמצאים בצ'אט פרטי
             if (currentRoomId !== 'public') {
                 const backBtn = document.createElement('button');
                 backBtn.className = 'menu-action-btn';
@@ -652,8 +748,14 @@
                 sidebarContent.appendChild(backBtn);
             }
 
+            // פאנל מנהל מלא למי שהתחבר עם הסיסמה
             if (isUserAdmin) {
-                sidebarTitle.innerText = "ניהול סודי";
+                sidebarTitle.innerText = "פאנל מנהל מערכת";
+
+                let adminHeaderTitle = document.createElement('div');
+                adminHeaderTitle.innerHTML = '<strong style="color:#d32f2f; font-size:13px;">ניהול משתמשים:</strong>';
+                sidebarContent.appendChild(adminHeaderTitle);
+
                 globalUsers.forEach(user => {
                     if (user.nickname !== currentNickname) {
                         const item = document.createElement('div');
@@ -662,31 +764,44 @@
                         item.innerHTML = `
                             <span style="flex:1;"><strong>${user.nickname}</strong><br>${statusHtml}</span>
                             <div style="display:flex; gap:2px;">
-                                <button style="background:#0084ff;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="createPrivateChatWithUser('${user.nickname}')">צ'אט</button>
-                                <button style="background:#4caf50;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="promptRole('${user.id}')">מנהל</button>
-                                ${user.online ? `<button style="background:#e53935;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="kickUser('${user.id}')">הסר</button>` : ''}
+                                <button style="background:#0084ff;color:white;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;" onclick="createPrivateChatWithUser('${user.nickname}')">צ'אט</button>
+                                <button style="background:#4caf50;color:white;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;" onclick="promptRole('${user.id}')">מנהל</button>
+                                ${user.online ? `<button style="background:#e53935;color:white;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;" onclick="kickUser('${user.id}')">הסר</button>` : ''}
                             </div>
                         `;
                         sidebarContent.appendChild(item);
                     }
                 });
 
+                let roomsHeaderTitle = document.createElement('div');
+                roomsHeaderTitle.innerHTML = '<br><strong style="color:#d32f2f; font-size:13px;">כל הצ\'אטים האישיים במערכת:</strong>';
+                sidebarContent.appendChild(roomsHeaderTitle);
+
                 const roomsKeys = Object.keys(globalRooms);
-                if (roomsKeys.length > 0) {
+                if (roomsKeys.length === 0) {
+                    let noRooms = document.createElement('div');
+                    noRooms.style.fontSize = '12px';
+                    noRooms.style.color = '#777';
+                    noRooms.innerText = 'אין צ\'אטים אישיים כרגע.';
+                    sidebarContent.appendChild(noRooms);
+                } else {
                     roomsKeys.forEach(rId => {
                         let room = globalRooms[rId];
                         let item = document.createElement('div');
                         item.className = 'room-item';
                         item.innerHTML = `
                             <span style="flex:1;"><strong>${room.name}</strong><br><small>${room.members.join(', ')}</small></span>
-                            <button style="background:#0084ff;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('${rId}', '${room.name} (צפייה)')">היכנס</button>
-                            <button style="background:#e53935;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="deleteRoom('${rId}')">מחק</button>
+                            <div style="display:flex; gap:2px;">
+                                <button style="background:#0084ff;color:white;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('${rId}', '${room.name}')">הכנס</button>
+                                <button style="background:#e53935;color:white;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;" onclick="deleteRoom('${rId}')">מחק</button>
+                            </div>
                         `;
                         sidebarContent.appendChild(item);
                     });
                 }
             } else {
-                sidebarTitle.innerText = "תפריט קבוצה";
+                // תפריט משתמש רגיל
+                sidebarTitle.innerText = "משתמשים מחוברים";
                 globalUsers.forEach(user => {
                     if (user.nickname !== currentNickname) {
                         const item = document.createElement('div');
@@ -700,18 +815,32 @@
                     }
                 });
 
+                let myRoomsHeader = document.createElement('div');
+                myRoomsHeader.innerHTML = '<br><strong style="font-size:13px;">הצ\'אטים הפרטיים שלי:</strong>';
+                sidebarContent.appendChild(myRoomsHeader);
+
                 let myRooms = Object.keys(globalRooms).filter(rId => globalRooms[rId].members.includes(currentNickname));
-                myRooms.forEach(rId => {
-                    let room = globalRooms[rId];
-                    let item = document.createElement('div');
-                    item.className = 'room-item';
-                    item.innerHTML = `
-                        <span style="flex:1;"><strong>${room.name}</strong></span>
-                        <button style="background:#0084ff;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('${rId}', '${room.name}')">הכנס</button>
-                        <button style="background:#e53935;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="deleteRoom('${rId}')">מחק צ'אט</button>
-                    `;
-                    sidebarContent.appendChild(item);
-                });
+                if (myRooms.length === 0) {
+                    let noMyRooms = document.createElement('div');
+                    noMyRooms.style.fontSize = '12px';
+                    noMyRooms.style.color = '#777';
+                    noMyRooms.innerText = 'אין לך צ\'אטים אישיים פעילים.';
+                    sidebarContent.appendChild(noMyRooms);
+                } else {
+                    myRooms.forEach(rId => {
+                        let room = globalRooms[rId];
+                        let item = document.createElement('div');
+                        item.className = 'room-item';
+                        item.innerHTML = `
+                            <span style="flex:1;"><strong>${room.name}</strong></span>
+                            <div style="display:flex; gap:2px;">
+                                <button style="background:#0084ff;color:white;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('${rId}', '${room.name}')">הכנס</button>
+                                <button style="background:#e53935;color:white;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;" onclick="deleteRoom('${rId}')">מחק</button>
+                            </div>
+                        `;
+                        sidebarContent.appendChild(item);
+                    });
+                }
             }
         });
 
@@ -727,7 +856,7 @@
         }
 
         function deleteRoom(roomId) {
-            if (confirm('למחק צ\'אט זה לצמיתות לשני הצדדים?')) {
+            if (confirm('למחוק צ\'אט זה לצמיתות?')) {
                 socket.emit('delete-private-room', roomId);
                 switchToRoom('public', 'צ\'אט קבוצתי');
             }
