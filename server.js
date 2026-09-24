@@ -50,7 +50,7 @@ io.on('connection', (socket) => {
 
         if (isFirstTime) {
             const time = getJerusalemTime();
-            const sysMsg = { id: Date.now().toString(), text: `${nickname} הצטרף/ה לצ'אט`, system: true, time };
+            const sysMsg = { id: Date.now().toString(), text: `${nickname} הצטרף/ה לצ'אט`, system: true, time, readBy: [] };
             publicMessages.push(sysMsg);
             io.to('public').emit('new-message', sysMsg);
         }
@@ -108,7 +108,7 @@ io.on('connection', (socket) => {
             type: data.type || 'text',
             role: currentUser ? currentUser.role : null,
             time: time,
-            readBy: [socket.id]
+            readBy: [currentUser.nickname] // מתחיל עם הכינוי של השולח
         };
 
         if (currentRoom === 'public') {
@@ -149,12 +149,13 @@ io.on('connection', (socket) => {
     });
 
     socket.on('mark-as-read', () => {
+        if (!currentUser) return;
         let msgs = currentRoom === 'public' ? publicMessages : (privateRooms[currentRoom] ? privateRooms[currentRoom].messages : null);
         if (msgs) {
             let updated = false;
             msgs.forEach(msg => {
-                if (!msg.system && msg.readBy && !msg.readBy.includes(socket.id)) {
-                    msg.readBy.push(socket.id);
+                if (!msg.system && msg.readBy && !msg.readBy.includes(currentUser.nickname)) {
+                    msg.readBy.push(currentUser.nickname);
                     updated = true;
                 }
             });
