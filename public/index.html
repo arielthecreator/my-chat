@@ -146,8 +146,8 @@
         #sidebar {
             position: absolute;
             top: 0;
-            right: -280px;
-            width: 280px;
+            right: -300px;
+            width: 300px;
             height: 100%;
             background: white;
             box-shadow: -2px 0 5px rgba(0,0,0,0.2);
@@ -179,17 +179,19 @@
             width: 100%;
             margin-bottom: 8px;
         }
-        .room-item {
+        .user-mgmt-item, .room-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
             font-size: 12px;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             background: #f9f9f9;
             padding: 6px;
             border-radius: 4px;
-            gap: 5px;
+            gap: 4px;
         }
+        .online-status { color: #4caf50; font-weight: bold; }
+        .offline-status { color: #888; }
         .leave-btn {
             background-color: #e53935;
             color: white;
@@ -357,7 +359,6 @@
             socket.emit('switch-room', roomId);
         }
 
-        // אם המנהל חסמ/מחק את הצ'אט בזמן שהמשתמש בפנים
         socket.on('room-deleted-by-admin', (roomId) => {
             if (currentRoomId === roomId) {
                 alert('הצ\'אט האישי הזה נחסם והוסר על ידי המנהל.');
@@ -403,7 +404,7 @@
 
             sidebarContent.innerHTML = '';
 
-            // כפתור חזרה לכללי תמיד זמין בתפריט למי שנמצא בחדר פרטי
+            // כפתור חזרה לכללי אם נמצאים בחדר פרטי
             if (currentRoomId !== 'public') {
                 const backToPublicBtn = document.createElement('button');
                 backToPublicBtn.className = 'menu-action-btn';
@@ -422,8 +423,35 @@
                 generalBtn.onclick = () => switchToRoom('public', 'צ\'אט קבוצתי');
                 sidebarContent.appendChild(generalBtn);
 
+                // --- 1. רשימת משתמשים מלאה ---
+                const usersTitle = document.createElement('p');
+                usersTitle.style.cssText = 'font-weight:bold; margin:10px 0 5px 0; font-size:13px; color:#333;';
+                usersTitle.innerText = 'משתמשים בקבוצה:';
+                sidebarContent.appendChild(usersTitle);
+
+                globalUsers.forEach(user => {
+                    if (user.nickname !== currentNickname) {
+                        const item = document.createElement('div');
+                        item.className = 'user-mgmt-item';
+                        let roleLabel = user.role ? `(${user.role})` : '';
+                        let statusHtml = user.online 
+                            ? `<span class="online-status">מחובר</span>` 
+                            : `<span class="offline-status">נראה: ${user.lastSeen}</span>`;
+                        
+                        item.innerHTML = `
+                            <span style="flex:1;"><strong>${user.nickname}</strong> ${roleLabel}<br>${statusHtml}</span>
+                            <div>
+                                <button style="background:#4caf50;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="promptRole('${user.id}')">מנהל</button>
+                                ${user.online ? `<button style="background:#e53935;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="kickUser('${user.id}')">הסр</button>` : ''}
+                            </div>
+                        `;
+                        sidebarContent.appendChild(item);
+                    }
+                });
+
+                // --- 2. רשימת כל הצ'אטים הפרטיים של כולם ---
                 const roomsTitle = document.createElement('p');
-                roomsTitle.style.cssText = 'font-weight:bold; margin:10px 0 5px 0; font-size:13px; color:#333;';
+                roomsTitle.style.cssText = 'font-weight:bold; margin:15px 0 5px 0; font-size:13px; color:#333;';
                 roomsTitle.innerText = 'כל הצ\'אטים הפרטיים שנפתחו:';
                 sidebarContent.appendChild(roomsTitle);
 
@@ -440,7 +468,7 @@
                         item.className = 'room-item';
                         item.innerHTML = `
                             <span style="flex:1;"><strong>${room.name}</strong><br><small>${room.members.join(', ')}</small></span>
-                            <button style="background:#4caf50;color:white;border:none;padding:4px 6px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('${rId}', '${room.name} (צפייה)')">היכנס</button>
+                            <button style="background:#0084ff;color:white;border:none;padding:4px 6px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('${rId}', '${room.name} (צפייה)')">היכנס</button>
                             <button style="background:#e53935;color:white;border:none;padding:4px 6px;border-radius:3px;cursor:pointer;" onclick="deleteRoom('${rId}')">חסום</button>
                         `;
                         sidebarContent.appendChild(item);
@@ -476,6 +504,20 @@
                 }
             }
         });
+
+        function promptRole(targetId) {
+            let choice = prompt('הקלד "מנהל" כדי להוסיף תפקיד, או השאר ריק / כתוב "הסרה" כדי להסיר:');
+            if (choice !== null) {
+                let role = choice.trim() === 'מנהל' ? 'מנהל' : null;
+                socket.emit('set-role', { targetId: targetId, role: role });
+            }
+        }
+
+        function kickUser(targetId) {
+            if (confirm('להסיר את המשתמש מהצ\'אט?')) {
+                socket.emit('kick-user', targetId);
+            }
+        }
 
         function deleteRoom(roomId) {
             if (confirm('האם אתה בטוח שברצונך לחסום ולמחוק את הצ\'אט הזה לצמיתות?')) {
