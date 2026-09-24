@@ -323,11 +323,11 @@
         const chatTitle = document.getElementById('chat-title');
 
         let currentNickname = localStorage.getItem('chat_nickname') || '';
-        let isUserAdmin = localStorage.getItem('chat_is_admin'] === 'true';
+        let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true'; // תוקן הסוגריים כאן
         let currentRoomId = 'public';
         let globalUsers = [];
         let globalRooms = {};
-        let activeMessagesData = []; // שומר את כל הודעות השרת הנוכחיות כדי להציג מי ראה
+        let activeMessagesData = [];
 
         if (currentNickname) {
             nicknameInput.value = currentNickname;
@@ -445,7 +445,6 @@
             appendMessage(data);
             socket.emit('mark-as-read');
 
-            // התראה קופצת ברקע אם האתר פתוח בטאב אחר או ממוזער
             if (data.nickname !== currentNickname && !data.system) {
                 if ("Notification" in window && Notification.permission === "granted") {
                     new Notification(`הודעה חדשה מ-${data.nickname}`, {
