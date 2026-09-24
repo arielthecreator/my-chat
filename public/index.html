@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>צ'אט קבוצתי מתקדם</title>
+    <title>צ'אט קבוצתי</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -64,32 +64,42 @@
             flex-direction: column;
             flex: 1;
             height: 100%;
+            position: relative;
         }
         header {
             background-color: #0084ff;
             color: white;
-            padding: 15px;
+            padding: 10px 15px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0;
         }
         .menu-btn {
             background: none;
             border: none;
             color: white;
-            font-size: 24px;
+            font-size: 22px;
             cursor: pointer;
         }
         #chat-title {
             margin: 0;
             cursor: pointer;
             user-select: none;
+            font-size: 16px;
+        }
+        .chat-messages-wrapper {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background-color: #f7f9fa;
         }
         #chat-messages {
             flex: 1;
             padding: 15px;
             overflow-y: auto;
-            background-color: #f7f9fa;
             display: flex;
             flex-direction: column;
             gap: 10px;
@@ -146,20 +156,58 @@
             top: 5px;
             left: 5px;
         }
-        .read-receipt {
-            font-size: 12px;
-            font-weight: bold;
-        }
+        .read-receipt { font-size: 12px; font-weight: bold; }
         .read-receipt.blue { color: #0084ff; }
         .read-receipt.gray { color: gray; }
+
+        /* חץ למטה הודעות חדשות */
+        #scroll-bottom-btn {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            background: #0084ff;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 18px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+        #scroll-bottom-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #e53935;
+            color: white;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 50%;
+            font-weight: bold;
+            display: none;
+        }
+
+        #typing-indicator {
+            padding: 2px 15px;
+            font-size: 12px;
+            color: #666;
+            background: #f7f9fa;
+            height: 16px;
+        }
 
         #chat-form {
             display: flex;
             align-items: center;
-            padding: 10px;
+            padding: 8px;
             background: white;
             border-top: 1px solid #ddd;
             gap: 5px;
+            flex-shrink: 0;
         }
         #chat-input {
             flex: 1;
@@ -176,11 +224,14 @@
             border-radius: 5px;
             cursor: pointer;
         }
+
+        /* סיידבר מתוקן שלא דורש גלילה ארוכה */
         #sidebar {
             position: absolute;
             top: 0;
-            right: -300px;
-            width: 300px;
+            right: -100%;
+            width: 85%;
+            max-width: 320px;
             height: 100%;
             background: white;
             box-shadow: -2px 0 5px rgba(0,0,0,0.2);
@@ -188,7 +239,7 @@
             z-index: 100;
             display: flex;
             flex-direction: column;
-            padding: 15px;
+            padding: 10px;
             box-sizing: border-box;
         }
         #sidebar.open { right: 0; }
@@ -197,8 +248,16 @@
             justify-content: space-between;
             align-items: center;
             border-bottom: 1px solid #ddd;
-            padding-bottom: 10px;
-            margin-bottom: 10px;
+            padding-bottom: 6px;
+            margin-bottom: 6px;
+            flex-shrink: 0;
+        }
+        #sidebar-content {
+            overflow-y: auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
         }
         .menu-action-btn {
             background-color: #0084ff;
@@ -210,14 +269,12 @@
             font-weight: bold;
             font-size: 13px;
             width: 100%;
-            margin-bottom: 8px;
         }
         .user-mgmt-item, .room-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
             font-size: 12px;
-            margin-bottom: 6px;
             background: #f9f9f9;
             padding: 6px;
             border-radius: 4px;
@@ -229,12 +286,13 @@
             background-color: #e53935;
             color: white;
             border: none;
-            padding: 10px;
+            padding: 8px;
             border-radius: 5px;
             cursor: pointer;
-            margin-top: auto;
+            margin-top: 6px;
             text-align: center;
             font-weight: bold;
+            flex-shrink: 0;
         }
         .msg-dropdown {
             display: none;
@@ -264,7 +322,6 @@
 <body>
 
     <div class="container">
-        <!-- מסך כניסה -->
         <div id="login-screen">
             <h2>ברוכים הבאים לצ'אט</h2>
             <p>בחר כינוי כדי להיכנס לשיחה:</p>
@@ -273,27 +330,28 @@
             <button id="login-btn">הכנס לצ'אט</button>
         </div>
 
-        <!-- מסך צ'אט -->
         <div id="chat-screen">
             <header>
                 <button class="menu-btn" id="menu-toggle">☰</button>
                 <h3 id="chat-title">צ'אט קבוצתי</h3>
-                <div>
-                    <span id="user-display" style="font-size: 13px;"></span>
-                </div>
+                <div><span id="user-display" style="font-size: 13px;"></span></div>
             </header>
 
-            <!-- פאנל צדדי -->
             <div id="sidebar">
                 <div class="sidebar-header">
                     <h4 style="margin:0;" id="sidebar-title">תפריט</h4>
                     <button id="close-sidebar" style="background:none;border:none;font-size:18px;cursor:pointer;">✕</button>
                 </div>
-                <div id="sidebar-content" style="overflow-y:auto; flex:1;"></div>
+                <div id="sidebar-content"></div>
                 <button class="leave-btn" onclick="leaveChat()">עזוב קבוצה</button>
             </div>
 
-            <div id="chat-messages"></div>
+            <div class="chat-messages-wrapper">
+                <div id="chat-messages"></div>
+                <button id="scroll-bottom-btn">↓<span id="scroll-bottom-badge">0</span></button>
+            </div>
+
+            <div id="typing-indicator"></div>
 
             <form id="chat-form">
                 <input type="text" id="chat-input" placeholder="כתוב הודעה..." autocomplete="off">
@@ -314,6 +372,9 @@
         const chatInput = document.getElementById('chat-input');
         const chatMessages = document.getElementById('chat-messages');
         const userDisplay = document.getElementById('user-display');
+        const scrollBottomBtn = document.getElementById('scroll-bottom-btn');
+        const scrollBottomBadge = document.getElementById('scroll-bottom-badge');
+        const typingIndicator = document.getElementById('typing-indicator');
         
         const menuToggle = document.getElementById('menu-toggle');
         const sidebar = document.getElementById('sidebar');
@@ -327,12 +388,15 @@
         let currentRoomId = 'public';
         let globalUsers = [];
         let globalRooms = {};
+        let activeMessagesData = [];
+        let unreadScrolledCount = 0;
+        let isUserScrolledUp = false;
 
         if (currentNickname) {
-            nicknameInput.value = currentNickname;
-            startChatSession();
+            loginScreen.style.display = 'none';
+            chatScreen.style.display = 'flex';
+            userDisplay.innerText = `מחובר כ: ${currentNickname}`;
             socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
-            requestNotificationPermission();
         }
 
         loginBtn.addEventListener('click', () => {
@@ -341,21 +405,42 @@
             currentNickname = nick;
             localStorage.setItem('chat_nickname', currentNickname);
             socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
-            startChatSession();
-            requestNotificationPermission();
-        });
-
-        function requestNotificationPermission() {
-            if ("Notification" in window && Notification.permission !== "granted") {
-                Notification.requestPermission();
-            }
-        }
-
-        function startChatSession() {
             loginScreen.style.display = 'none';
             chatScreen.style.display = 'flex';
             userDisplay.innerText = `מחובר כ: ${currentNickname}`;
-        }
+        });
+
+        chatMessages.addEventListener('scroll', () => {
+            const threshold = 60;
+            const position = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight;
+            isUserScrolledUp = position > threshold;
+
+            if (!isUserScrolledUp) {
+                unreadScrolledCount = 0;
+                scrollBottomBtn.style.display = 'none';
+                scrollBottomBadge.style.display = 'none';
+                scrollBottomBadge.innerText = '0';
+            }
+        });
+
+        scrollBottomBtn.addEventListener('click', () => {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            unreadScrolledCount = 0;
+            scrollBottomBtn.style.display = 'none';
+            scrollBottomBadge.style.display = 'none';
+            scrollBottomBadge.innerText = '0';
+        });
+
+        let typingTimeout;
+        chatInput.addEventListener('input', () => {
+            socket.emit('typing', true);
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => { socket.emit('typing', false); }, 1000);
+        });
+
+        socket.on('user-typing', (data) => {
+            typingIndicator.innerText = data.isTyping ? `${data.nickname} מקליד/ה...` : '';
+        });
 
         chatForm.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -363,6 +448,7 @@
             if (text !== '') {
                 socket.emit('chat-message', { nickname: currentNickname, text: text, type: 'text' });
                 chatInput.value = '';
+                socket.emit('typing', false);
             }
         });
 
@@ -391,31 +477,15 @@
             }
         });
 
-        function openCreatePrivateRoomModal(targetUser = null) {
-            let roomName = prompt('איך אתה רוצה לקרוא לצ\'אט האישי?');
+        function createPrivateChatWithUser(targetUser) {
+            let roomName = prompt(`איך תרצה לקרוא לצ'אט האישי עם ${targetUser}?`, `צ'אט עם ${targetUser}`);
             if (!roomName || !roomName.trim()) return;
-
-            let availableUsers = globalUsers.filter(u => u.nickname !== currentNickname).map(u => u.nickname);
-            if (availableUsers.length === 0) {
-                alert('אין משתמשים אחרים זמינים לצרף כרגע.');
-                return;
-            }
-
-            let target = targetUser;
-            if (!target) {
-                target = prompt('בחר את מי לצרף מרשימת המשתמשים הבאה:\n' + availableUsers.join(', '));
-            }
-
-            if (!target || !availableUsers.includes(target.trim())) {
-                alert('שם משתמש לא תקין.');
-                return;
-            }
-
-            socket.emit('create-private-room', { roomName: roomName.trim(), targetNickname: target.trim() });
+            socket.emit('create-private-room', { roomName: roomName.trim(), targetNickname: targetUser });
         }
 
         socket.on('room-created', (roomId) => {
-            switchToRoom(roomId, 'צ\'אט אישי');
+            let roomObj = globalRooms[roomId];
+            switchToRoom(roomId, roomObj ? roomObj.name : 'צ\'אט אישי');
         });
 
         function switchToRoom(roomId, roomTitle) {
@@ -427,33 +497,26 @@
 
         socket.on('room-deleted-by-admin', (roomId) => {
             if (currentRoomId === roomId) {
-                alert('הצ\'אט האישי הזה נחסם והוסר על ידי המנהל.');
+                alert('הצ\'אט האישי הזה נמחק.');
                 switchToRoom('public', 'צ\'אט קבוצתי');
             }
         });
 
         socket.on('load-messages', (msgs) => {
+            activeMessagesData = msgs;
             chatMessages.innerHTML = '';
-            msgs.forEach(data => appendMessage(data));
+            msgs.forEach(data => appendMessage(data, false));
+            chatMessages.scrollTop = chatMessages.scrollHeight;
             socket.emit('mark-as-read');
         });
 
         socket.on('new-message', (data) => {
-            appendMessage(data);
-            socket.emit('mark-as-read');
-
-            // הצגת התראה בדפדפן אם האתר ברקע או שהמשתמש לא שלח בעצמו
-            if (data.nickname !== currentNickname && !data.system) {
-                if ("Notification" in window && Notification.permission === "granted") {
-                    new Notification(`הודעה חדשה מ-${data.nickname}`, {
-                        body: data.text,
-                        icon: '/favicon.ico'
-                    });
-                }
-            }
+            activeMessagesData.push(data);
+            appendMessage(data, true);
         });
 
         socket.on('update-messages-status', (msgs) => {
+            activeMessagesData = msgs;
             msgs.forEach(data => {
                 const div = document.getElementById(data.id);
                 if (div) {
@@ -468,6 +531,8 @@
         });
 
         socket.on('message-edited', (data) => {
+            const msg = activeMessagesData.find(m => m.id === data.messageId);
+            if (msg) msg.text = data.newText;
             const div = document.getElementById(data.messageId);
             if (div) {
                 const textSpan = div.querySelector('.msg-text');
@@ -476,24 +541,24 @@
         });
 
         socket.on('message-deleted', (messageId) => {
+            activeMessagesData = activeMessagesData.filter(m => m.id !== messageId);
             const div = document.getElementById(messageId);
             if (div) div.remove();
         });
 
         socket.on('kicked', () => {
             alert('הוסרת מהצ\'אט על ידי מנהל.');
-            localStorage.removeItem('chat_nickname');
-            localStorage.removeItem('chat_is_admin');
+            localStorage.clear();
             window.location.reload();
         });
 
-        function appendMessage(data) {
+        function appendMessage(data, shouldScrollCheck) {
             if (data.system) {
                 const div = document.createElement('div');
                 div.className = 'message system';
                 div.innerText = data.text;
                 chatMessages.appendChild(div);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
+                handleScrollAfterAppend(shouldScrollCheck);
                 return;
             }
 
@@ -520,7 +585,23 @@
                 </div>
             `;
             chatMessages.appendChild(div);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+            handleScrollAfterAppend(shouldScrollCheck);
+            socket.emit('mark-as-read');
+        }
+
+        function handleScrollAfterAppend(shouldScrollCheck) {
+            if (!shouldScrollCheck) {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                return;
+            }
+            if (isUserScrolledUp) {
+                unreadScrolledCount++;
+                scrollBottomBtn.style.display = 'flex';
+                scrollBottomBadge.style.display = 'inline-block';
+                scrollBottomBadge.innerText = unreadScrolledCount;
+            } else {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
         }
 
         function toggleMsgMenu(msgId) {
@@ -543,59 +624,45 @@
         }
 
         function deleteMessage(msgId) {
-            if (confirm('האם למחוק הודעה זו?')) {
-                socket.emit('delete-message', msgId);
-            }
+            if (confirm('האם למחוק הודעה זו?')) { socket.emit('delete-message', msgId); }
             toggleMsgMenu(msgId);
         }
 
         function showMsgDetails(msgId) {
-            alert('ההודעה נקראה על ידי שאר המשתתפים הפעילים בחדר.');
+            const msg = activeMessagesData.find(m => m.id === msgId);
+            if (msg && msg.readBy && msg.readBy.length > 0) {
+                alert('ההודעה נקראה על ידי:\n• ' + msg.readBy.join('\n• '));
+            } else {
+                alert('אף אחד עדיין לא קרא את ההודעה.');
+            }
             toggleMsgMenu(msgId);
         }
 
         socket.on('update-data', (data) => {
             globalUsers = data.allUsers;
             globalRooms = data.privateRooms;
-
             sidebarContent.innerHTML = '';
 
             if (currentRoomId !== 'public') {
-                const backToPublicBtn = document.createElement('button');
-                backToPublicBtn.className = 'menu-action-btn';
-                backToPublicBtn.style.backgroundColor = '#607d8b';
-                backToPublicBtn.innerText = '⬅️ חזרה לצ\'אט הראשי';
-                backToPublicBtn.onclick = () => switchToRoom('public', 'צ\'אט קבוצתי');
-                sidebarContent.appendChild(backToPublicBtn);
+                const backBtn = document.createElement('button');
+                backBtn.className = 'menu-action-btn';
+                backBtn.style.backgroundColor = '#607d8b';
+                backBtn.innerText = '⬅️ חזרה לצ\'אט הראשי';
+                backBtn.onclick = () => switchToRoom('public', 'צ\'אט קבוצתי');
+                sidebarContent.appendChild(backBtn);
             }
 
             if (isUserAdmin) {
-                sidebarTitle.innerText = "ניהול סודי (הכל)";
-                
-                const generalBtn = document.createElement('button');
-                generalBtn.className = 'menu-action-btn';
-                generalBtn.innerText = '💬 חזור לצ\'אט הכללי';
-                generalBtn.onclick = () => switchToRoom('public', 'צ\'אט קבוצתי');
-                sidebarContent.appendChild(generalBtn);
-
-                const usersTitle = document.createElement('p');
-                usersTitle.style.cssText = 'font-weight:bold; margin:10px 0 5px 0; font-size:13px; color:#333;';
-                usersTitle.innerText = 'משתמשים בקבוצה:';
-                sidebarContent.appendChild(usersTitle);
-
+                sidebarTitle.innerText = "ניהול סודי";
                 globalUsers.forEach(user => {
                     if (user.nickname !== currentNickname) {
                         const item = document.createElement('div');
                         item.className = 'user-mgmt-item';
-                        let roleLabel = user.role ? `(${user.role})` : '';
-                        let statusHtml = user.online 
-                            ? `<span class="online-status">מחובר</span>` 
-                            : `<span class="offline-status">נראה: ${user.lastSeen}</span>`;
-                        
+                        let statusHtml = user.online ? `<span class="online-status">מחובר</span>` : `<span class="offline-status">נראה: ${user.lastSeen}</span>`;
                         item.innerHTML = `
-                            <span style="flex:1;"><strong>${user.nickname}</strong> ${roleLabel}<br>${statusHtml}</span>
-                            <div>
-                                <button style="background:#0084ff;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="openCreatePrivateRoomModal('${user.nickname}')">💬 צ'אט</button>
+                            <span style="flex:1;"><strong>${user.nickname}</strong><br>${statusHtml}</span>
+                            <div style="display:flex; gap:2px;">
+                                <button style="background:#0084ff;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="createPrivateChatWithUser('${user.nickname}')">צ'אט</button>
                                 <button style="background:#4caf50;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="promptRole('${user.id}')">מנהל</button>
                                 ${user.online ? `<button style="background:#e53935;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="kickUser('${user.id}')">הסר</button>` : ''}
                             </div>
@@ -604,85 +671,71 @@
                     }
                 });
 
-                const roomsTitle = document.createElement('p');
-                roomsTitle.style.cssText = 'font-weight:bold; margin:15px 0 5px 0; font-size:13px; color:#333;';
-                roomsTitle.innerText = 'כל הצ\'אטים הפרטיים שנפתחו:';
-                sidebarContent.appendChild(roomsTitle);
-
                 const roomsKeys = Object.keys(globalRooms);
-                if (roomsKeys.length === 0) {
-                    const noRooms = document.createElement('p');
-                    noRooms.style.cssText = 'font-size:12px; color:#777;';
-                    noRooms.innerText = 'עדיין לא נפתחו צ\'אטים פרטיים.';
-                    sidebarContent.appendChild(noRooms);
-                } else {
+                if (roomsKeys.length > 0) {
                     roomsKeys.forEach(rId => {
                         let room = globalRooms[rId];
                         let item = document.createElement('div');
                         item.className = 'room-item';
                         item.innerHTML = `
                             <span style="flex:1;"><strong>${room.name}</strong><br><small>${room.members.join(', ')}</small></span>
-                            <button style="background:#0084ff;color:white;border:none;padding:4px 6px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('${rId}', '${room.name} (צפייה)')">היכנס</button>
-                            <button style="background:#e53935;color:white;border:none;padding:4px 6px;border-radius:3px;cursor:pointer;" onclick="deleteRoom('${rId}')">חסום</button>
+                            <button style="background:#0084ff;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('${rId}', '${room.name} (צפייה)')">היכנס</button>
+                            <button style="background:#e53935;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="deleteRoom('${rId}')">מחק</button>
                         `;
                         sidebarContent.appendChild(item);
                     });
                 }
-
             } else {
                 sidebarTitle.innerText = "תפריט קבוצה";
-
-                const privBtn = document.createElement('button');
-                privBtn.className = 'menu-action-btn';
-                privBtn.innerText = '➕ פתח צ\'אט אישי חדש';
-                privBtn.onclick = () => openCreatePrivateRoomModal();
-                sidebarContent.appendChild(privBtn);
-
-                const myRooms = Object.keys(globalRooms).filter(rId => globalRooms[rId].members.includes(currentNickname));
-                if (myRooms.length > 0) {
-                    const myRoomsTitle = document.createElement('p');
-                    myRoomsTitle.style.cssText = 'font-weight:bold; margin:10px 0 5px 0; font-size:13px;';
-                    myRoomsTitle.innerText = 'הצ\'אטים האישיים שלי:';
-                    sidebarContent.appendChild(myRoomsTitle);
-
-                    myRooms.forEach(rId => {
-                        let room = globalRooms[rId];
-                        let item = document.createElement('div');
-                        item.className = 'room-item';
+                globalUsers.forEach(user => {
+                    if (user.nickname !== currentNickname) {
+                        const item = document.createElement('div');
+                        item.className = 'user-mgmt-item';
+                        let statusHtml = user.online ? `<span class="online-status">מחובר כעת</span>` : `<span class="offline-status">התחבר ב-${user.lastSeen}</span>`;
                         item.innerHTML = `
-                            <span style="flex:1;">${room.name}</span>
-                            <button style="background:#0084ff;color:white;border:none;padding:5px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('${rId}', '${room.name}')">הכנס</button>
+                            <span style="flex:1;"><strong>${user.nickname}</strong><br>${statusHtml}</span>
+                            <button style="background:#0084ff;color:white;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-weight:bold;" onclick="createPrivateChatWithUser('${user.nickname}')">💬 צ'אט</button>
                         `;
                         sidebarContent.appendChild(item);
-                    });
-                }
+                    }
+                });
+
+                let myRooms = Object.keys(globalRooms).filter(rId => globalRooms[rId].members.includes(currentNickname));
+                myRooms.forEach(rId => {
+                    let room = globalRooms[rId];
+                    let item = document.createElement('div');
+                    item.className = 'room-item';
+                    item.innerHTML = `
+                        <span style="flex:1;"><strong>${room.name}</strong></span>
+                        <button style="background:#0084ff;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('${rId}', '${room.name}')">הכנס</button>
+                        <button style="background:#e53935;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="deleteRoom('${rId}')">מחק צ'אט</button>
+                    `;
+                    sidebarContent.appendChild(item);
+                });
             }
         });
 
         function promptRole(targetId) {
-            let choice = prompt('הקלד "מנהל" כדי להוסיף תפקיד, או השאר ריק / כתוב "הסרה" כדי להסיר:');
+            let choice = prompt('הקלד "מנהל" להוספה, או השאר ריק להסרה:');
             if (choice !== null) {
-                let role = choice.trim() === 'מנהל' ? 'מנהל' : null;
-                socket.emit('set-role', { targetId: targetId, role: role });
+                socket.emit('set-role', { targetId: targetId, role: choice.trim() === 'מנהל' ? 'מנהל' : null });
             }
         }
 
         function kickUser(targetId) {
-            if (confirm('להסיר את המשתמש מהצ\'אט?')) {
-                socket.emit('kick-user', targetId);
-            }
+            if (confirm('להסיר משתמש זה?')) { socket.emit('kick-user', targetId); }
         }
 
         function deleteRoom(roomId) {
-            if (confirm('האם אתה בטוח שברצונך לחסום ולמחוק את הצ\'אט הזה לצמיתות?')) {
+            if (confirm('למחק צ\'אט זה לצמיתות לשני הצדדים?')) {
                 socket.emit('delete-private-room', roomId);
+                switchToRoom('public', 'צ\'אט קבוצתי');
             }
         }
 
         function leaveChat() {
-            if (confirm('האם אתה בטוח שברצונך לעזוב את הקבוצה?')) {
-                localStorage.removeItem('chat_nickname');
-                localStorage.removeItem('chat_is_admin');
+            if (confirm('לעזוב את הקבוצה?')) {
+                localStorage.clear();
                 window.location.reload();
             }
         }
