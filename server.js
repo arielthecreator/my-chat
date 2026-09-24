@@ -10,8 +10,9 @@ const io = new Server(server, { maxHttpBufferSize: 10 * 1024 * 1024 });
 app.use(express.static(path.join(__dirname, 'public')));
 
 const ADMIN_PASSWORD = '123';
-let messages = [];
-let allUsers = []; // יכיל את כל המשתמשים שנרשמו אי פעם
+let publicMessages = [];
+let allUsers = [];
+let privateRooms = {};
 
 function getJerusalemTime() {
     return new Date().toLocaleTimeString('he-IL', { 
@@ -23,6 +24,7 @@ function getJerusalemTime() {
 
 io.on('connection', (socket) => {
     let currentUser = null;
+    let currentRoom = 'public';
 
     socket.on('join', (data) => {
         const nickname = data.nickname;
@@ -30,127 +32,134 @@ io.on('connection', (socket) => {
         
         currentUser = { id: socket.id, nickname, isAdmin, role: isAdmin ? 'מנהל' : null, online: true, lastSeen: 'מחובר כעת' };
 
-        // נבדוק אם המשתמש כבר קיים במערכת (לפי כינוי)
         const existingUser = allUsers.find(u => u.nickname === nickname);
         let isFirstTime = false;
 
         if (existingUser) {
-            // מעדכנים את ה-Socket ID העדכני שלו ומסמנים כמחובר
             existingUser.id = socket.id;
             existingUser.online = true;
             existingUser.lastSeen = 'מחובר כעת';
             if (isAdmin) existingUser.role = 'מנהל';
         } else {
-            // זה משתמש חדש לגמרי שנכנס לראשונה!
             isFirstTime = true;
             allUsers.push(currentUser);
         }
 
-        socket.emit('load-messages', messages);
+        socket.join('public');
+        socket.emit('load-messages', publicMessages);
 
-        // הודעת מערכת תופיע אך ורק בפעם הראשונה שהמשתמש נרשם לצ'אט
         if (isFirstTime) {
             const time = getJerusalemTime();
             const sysMsg = { id: Date.now().toString(), text: `${nickname} הצטרף/ה לצ'אט`, system: true, time };
-            messages.push(sysMsg);
-            io.emit('new-message', sysMsg);
+            publicMessages.push(sysMsg);
+            io.to('public').emit('new-message', sysMsg);
         }
 
-        updateUsersList();
+        updateUsersAndRoomsList();
     });
 
-    // חיווי הקלדה
-    socket.on('typing', (data) => {
-        socket.broadcast.emit('display-typing', data);
+    socket.on('switch-room', (roomId) => {
+        socket.leave(currentRoom);
+        currentRoom = roomId;
+        socket.join(roomId);
+
+        if (roomId === 'public') {
+            socket.emit('load-messages', publicMessages);
+        } else if (privateRooms[roomId]) {
+            socket.emit('load-messages', privateRooms[roomId].messages);
+        }
+    });
+
+    socket.on('create-private-room', (data) => {
+        const { roomName, targetNickname } = data;
+        const targetUser = allUsers.find(u => u.nickname === targetNickname);
+        
+        if (!targetUser) {
+            socket.emit('room-error', 'המשתמש שנבחר אינו נמצא במערכת.');
+            return;
+        }
+
+        const roomId = 'room_' + Date.now();
+        privateRooms[roomId] = {
+            name: roomName,
+            creator: currentUser.nickname,
+            members: [currentUser.nickname, targetUser.nickname],
+            messages: []
+        };
+
+        socket.emit('room-created', roomId);
+        updateUsersAndRoomsList();
+    });
+
+    // מחיקת צ'אט פרטי על ידי מנהל
+    socket.on('delete-private-room', (roomId) => {
+        if (currentUser && currentUser.isAdmin && privateRooms[roomId]) {
+            io.to(roomId).emit('room-deleted-by-admin', roomId);
+            delete privateRooms[roomId];
+            updateUsersAndRoomsList();
+        }
     });
 
     socket.on('chat-message', (data) => {
-        const user = allUsers.find(u => u.id === socket.id);
         const time = getJerusalemTime();
-
         const msgData = {
             id: Date.now().toString(),
             nickname: data.nickname,
             text: data.text,
             type: data.type || 'text',
-            role: user ? user.role : null,
+            role: currentUser ? currentUser.role : null,
             time: time,
             readBy: [socket.id]
         };
 
-        messages.push(msgData);
-        if (messages.length > 100) messages.shift();
-
-        io.emit('new-message', msgData);
-    });
-
-    socket.on('mark-as-read', () => {
-        let updated = false;
-        messages.forEach(msg => {
-            if (!msg.system && msg.readBy && !msg.readBy.includes(socket.id)) {
-                msg.readBy.push(socket.id);
-                updated = true;
-            }
-        });
-        if (updated) {
-            io.emit('update-messages-status', messages);
+        if (currentRoom === 'public') {
+            publicMessages.push(msgData);
+            if (publicMessages.length > 100) publicMessages.shift();
+            io.to('public').emit('new-message', msgData);
+        } else if (privateRooms[currentRoom]) {
+            privateRooms[currentRoom].messages.push(msgData);
+            io.to(currentRoom).emit('new-message', msgData);
         }
     });
 
-    socket.on('edit-message', (data) => {
-        const msg = messages.find(m => m.id === data.id);
-        if (msg && msg.type === 'text') {
-            msg.text = data.newText + ' (נערך)';
-            io.emit('message-edited', { id: data.id, newText: msg.text });
+    socket.on('mark-as-read', () => {
+        let msgs = currentRoom === 'public' ? publicMessages : (privateRooms[currentRoom] ? privateRooms[currentRoom].messages : null);
+        if (msgs) {
+            let updated = false;
+            msgs.forEach(msg => {
+                if (!msg.system && msg.readBy && !msg.readBy.includes(socket.id)) {
+                    msg.readBy.push(socket.id);
+                    updated = true;
+                }
+            });
+            if (updated) {
+                io.to(currentRoom).emit('update-messages-status', msgs);
+            }
         }
     });
 
     socket.on('verify-admin', (password) => {
         if (password === ADMIN_PASSWORD) {
-            const user = allUsers.find(u => u.id === socket.id);
-            if (user) {
-                user.role = 'מנהל';
-                user.isAdmin = true;
+            if (currentUser) {
+                currentUser.role = 'מנהל';
+                currentUser.isAdmin = true;
             }
             socket.emit('admin-success', true);
-            updateUsersList();
+            updateUsersAndRoomsList();
         } else {
             socket.emit('admin-success', false);
         }
     });
 
     socket.on('clear-chat', () => {
-        const user = allUsers.find(u => u.id === socket.id);
-        if (user && user.isAdmin) {
-            messages = [];
-            io.emit('chat-cleared');
-        }
-    });
-
-    socket.on('set-role', (data) => {
-        const adminUser = allUsers.find(u => u.id === socket.id);
-        if (adminUser && adminUser.isAdmin) {
-            const target = allUsers.find(u => u.id === data.targetId);
-            if (target) {
-                target.role = data.role;
-                target.isAdmin = (data.role === 'מנהל');
-                updateUsersList();
+        if (currentUser && currentUser.isAdmin) {
+            if (currentRoom === 'public') {
+                publicMessages = [];
+                io.to('public').emit('chat-cleared');
+            } else if (privateRooms[currentRoom]) {
+                privateRooms[currentRoom].messages = [];
+                io.to(currentRoom).emit('chat-cleared');
             }
-        }
-    });
-
-    socket.on('kick-user', (targetId) => {
-        const adminUser = allUsers.find(u => u.id === socket.id);
-        if (adminUser && adminUser.isAdmin) {
-            io.to(targetId).emit('kicked');
-        }
-    });
-
-    socket.on('change-nickname', (data) => {
-        const user = allUsers.find(u => u.id === socket.id);
-        if (user) {
-            user.nickname = data.newNickname;
-            updateUsersList();
         }
     });
 
@@ -161,13 +170,14 @@ io.on('connection', (socket) => {
                 user.online = false;
                 user.lastSeen = getJerusalemTime();
             }
-            updateUsersList();
+            updateUsersAndRoomsList();
         }
     });
 
-    function updateUsersList() {
-        io.emit('update-users', {
-            allUsers: allUsers // שולחים את כל המשתמשים שנרשמו אי פעם למערכת
+    function updateUsersAndRoomsList() {
+        io.emit('update-data', {
+            allUsers: allUsers,
+            privateRooms: privateRooms
         });
     }
 });
