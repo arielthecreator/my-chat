@@ -11,8 +11,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const ADMIN_PASSWORD = '123';
 let publicMessages = [];
-let allUsers = [];       // רשימת כל המשתמשים שהתחברו אי פעם
-let privateRooms = {};   // רשימת כל הצ'אטים הפרטיים
+let allUsers = [];
+let privateRooms = {};
 
 function getJerusalemTime() {
     return new Date().toLocaleTimeString('he-IL', { 
@@ -91,7 +91,6 @@ io.on('connection', (socket) => {
         updateUsersAndRoomsList();
     });
 
-    // מחיקת/חסימת צ'אט פרטי על ידי מנהל
     socket.on('delete-private-room', (roomId) => {
         if (currentUser && currentUser.isAdmin && privateRooms[roomId]) {
             io.to(roomId).emit('room-deleted-by-admin', roomId);
@@ -114,11 +113,24 @@ io.on('connection', (socket) => {
 
         if (currentRoom === 'public') {
             publicMessages.push(msgData);
-            if (publicMessages.length > 100) publicMessages.shift();
+            if (publicMessages.length > 150) publicMessages.shift();
             io.to('public').emit('new-message', msgData);
         } else if (privateRooms[currentRoom]) {
             privateRooms[currentRoom].messages.push(msgData);
             io.to(currentRoom).emit('new-message', msgData);
+        }
+    });
+
+    socket.on('edit-message', (data) => {
+        const { messageId, newText } = data;
+        let msgs = currentRoom === 'public' ? publicMessages : (privateRooms[currentRoom] ? privateRooms[currentRoom].messages : null);
+        if (msgs) {
+            const msg = msgs.find(m => m.id === messageId);
+            if (msg && msg.nickname === currentUser.nickname) {
+                msg.text = newText;
+                msg.edited = true;
+                io.to(currentRoom).emit('message-edited', { messageId, newText });
+            }
         }
     });
 
@@ -164,18 +176,6 @@ io.on('connection', (socket) => {
     socket.on('kick-user', (targetId) => {
         if (currentUser && currentUser.isAdmin) {
             io.to(targetId).emit('kicked');
-        }
-    });
-
-    socket.on('clear-chat', () => {
-        if (currentUser && currentUser.isAdmin) {
-            if (currentRoom === 'public') {
-                publicMessages = [];
-                io.to('public').emit('chat-cleared');
-            } else if (privateRooms[currentRoom]) {
-                privateRooms[currentRoom].messages = [];
-                io.to(currentRoom).emit('chat-cleared');
-            }
         }
     });
 
