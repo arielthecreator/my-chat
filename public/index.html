@@ -236,7 +236,6 @@
             text-align: center;
             font-weight: bold;
         }
-        /* פופאפ תפריט הודעה */
         .msg-dropdown {
             display: none;
             position: absolute;
@@ -333,6 +332,7 @@
             nicknameInput.value = currentNickname;
             startChatSession();
             socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
+            requestNotificationPermission();
         }
 
         loginBtn.addEventListener('click', () => {
@@ -342,7 +342,14 @@
             localStorage.setItem('chat_nickname', currentNickname);
             socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
             startChatSession();
+            requestNotificationPermission();
         });
+
+        function requestNotificationPermission() {
+            if ("Notification" in window && Notification.permission !== "granted") {
+                Notification.requestPermission();
+            }
+        }
 
         function startChatSession() {
             loginScreen.style.display = 'none';
@@ -434,6 +441,16 @@
         socket.on('new-message', (data) => {
             appendMessage(data);
             socket.emit('mark-as-read');
+
+            // הצגת התראה בדפדפן אם האתר ברקע או שהמשתמש לא שלח בעצמו
+            if (data.nickname !== currentNickname && !data.system) {
+                if ("Notification" in window && Notification.permission === "granted") {
+                    new Notification(`הודעה חדשה מ-${data.nickname}`, {
+                        body: data.text,
+                        icon: '/favicon.ico'
+                    });
+                }
+            }
         });
 
         socket.on('update-messages-status', (msgs) => {
@@ -442,7 +459,6 @@
                 if (div) {
                     const receipt = div.querySelector('.read-receipt');
                     if (receipt) {
-                        const totalUsers = globalUsers.filter(u => u.online).length || 1;
                         const readCount = data.readBy ? data.readBy.length : 1;
                         receipt.className = `read-receipt ${readCount > 1 ? 'blue' : 'gray'}`;
                         receipt.innerText = readCount > 1 ? '✓✓' : '✓';
@@ -457,6 +473,11 @@
                 const textSpan = div.querySelector('.msg-text');
                 if (textSpan) textSpan.innerText = data.newText + ' (נערך)';
             }
+        });
+
+        socket.on('message-deleted', (messageId) => {
+            const div = document.getElementById(messageId);
+            if (div) div.remove();
         });
 
         socket.on('kicked', () => {
@@ -482,11 +503,13 @@
 
             let badgeHtml = data.role ? `<span class="badge">${data.role}</span>` : '';
             let isMyMsg = data.nickname === currentNickname;
+            let canDelete = isMyMsg || isUserAdmin;
 
             div.innerHTML = `
                 <button class="msg-menu-btn" onclick="toggleMsgMenu('${data.id}')">⋮</button>
                 <div class="msg-dropdown" id="dropdown-${data.id}">
                     ${isMyMsg ? `<button onclick="editMessage('${data.id}')">עריכה</button>` : ''}
+                    ${canDelete ? `<button onclick="deleteMessage('${data.id}')" style="color:red;">מחק</button>` : ''}
                     <button onclick="showMsgDetails('${data.id}')">פרטים (מי ראה)</button>
                 </div>
                 <strong>${badgeHtml}${data.nickname}:</strong>
@@ -519,8 +542,14 @@
             toggleMsgMenu(msgId);
         }
 
+        function deleteMessage(msgId) {
+            if (confirm('האם למחוק הודעה זו?')) {
+                socket.emit('delete-message', msgId);
+            }
+            toggleMsgMenu(msgId);
+        }
+
         function showMsgDetails(msgId) {
-            // שליפת פרטי הקריאה מההודעה במסך
             alert('ההודעה נקראה על ידי שאר המשתתפים הפעילים בחדר.');
             toggleMsgMenu(msgId);
         }
