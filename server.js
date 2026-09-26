@@ -66,6 +66,7 @@ io.on('connection', (socket) => {
 
     socket.on('switch-room', (roomId) => {
         try {
+            if (!roomId) return;
             socket.leave(currentRoom);
             currentRoom = roomId;
             socket.join(roomId);
@@ -74,6 +75,8 @@ io.on('connection', (socket) => {
                 socket.emit('load-messages', publicMessages);
             } else if (privateRooms[roomId]) {
                 socket.emit('load-messages', privateRooms[roomId].messages);
+            } else {
+                socket.emit('load-messages', []);
             }
         } catch (err) {
             console.error('Error in switch-room:', err);
@@ -140,7 +143,7 @@ io.on('connection', (socket) => {
                 nickname: data.nickname,
                 text: data.text,
                 type: data.type || 'text',
-                replyTo: data.replyTo || null, // שמירת הציטוט אם קיים
+                replyTo: data.replyTo || null,
                 role: currentUser ? currentUser.role : null,
                 time: time,
                 readBy: currentUser ? [currentUser.nickname] : []
