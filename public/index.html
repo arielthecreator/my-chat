@@ -352,7 +352,6 @@
         }
         .msg-dropdown button:hover { background: #f0f0f0; }
         
-        /* Modal Custom Styling for Ban Time Picker */
         #ban-modal {
             display: none;
             position: fixed;
@@ -536,7 +535,7 @@
                 localStorage.setItem('chat_nickname', currentNickname);
                 userDisplay.innerText = currentNickname;
                 socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
-                alert עודכן בהצלחה!
+                alert('הכינוי עודכן בהצלחה!');
             }
         }
 
@@ -869,7 +868,6 @@
             if (isUserAdmin) {
                 sidebarTitle.innerText = "פאנל מנהל מערכת";
 
-                // כפתור ניקוי צ'אט אישי למנהל בלבד
                 const clearChatBtn = document.createElement('button');
                 clearChatBtn.className = 'menu-action-btn';
                 clearChatBtn.style.backgroundColor = '#e53935';
@@ -972,7 +970,6 @@
             }
         });
 
-        // ניהול מודל חסימות
         function openBanModal(targetId) {
             selectedTargetIdForBan = targetId;
             banDurationSelect.value = "1h";
