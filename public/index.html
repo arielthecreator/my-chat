@@ -534,10 +534,8 @@
             switchToRoom(roomId, roomObj ? roomObj.name : 'צ\'אט אישי');
         });
 
-        // פונקציה מתוקנת לחלוטין לכניסה לחדר בצורה בטוחה
         function switchToRoom(roomId, roomTitle) {
             currentRoomId = roomId;
-            // שליפה בטוחה של שם החדר מתוך האובייקט הגלובלי אם הכותרת לא הועברה נכון
             let finalTitle = roomTitle;
             if ((!finalTitle || finalTitle === 'undefined') && globalRooms[roomId]) {
                 finalTitle = globalRooms[roomId].name;
@@ -727,7 +725,6 @@
             toggleMsgMenu(msgId);
         }
 
-        // עיבוד התפריט בסיידבר עם העברת מזהה החדר והשם בצורה תקינה לחלוטין לכפתורי ה"הכנס"
         socket.on('update-data', (data) => {
             globalUsers = data.allUsers;
             globalRooms = data.privateRooms;
