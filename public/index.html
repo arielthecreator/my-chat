@@ -255,6 +255,9 @@
             border-radius: 5px;
             cursor: pointer;
         }
+        #voice-btn {
+            background-color: #28a745 !important;
+        }
 
         #sidebar {
             position: absolute;
@@ -348,6 +351,33 @@
             font-size: 13px;
         }
         .msg-dropdown button:hover { background: #f0f0f0; }
+        
+        /* Modal Custom Styling for Ban Time Picker */
+        #ban-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .ban-modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .ban-modal-content select, .ban-modal-content input {
+            padding: 8px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -365,7 +395,10 @@
             <header>
                 <button class="menu-btn" id="menu-toggle">☰</button>
                 <h3 id="chat-title">צ'אט קבוצתי</h3>
-                <div><span id="user-display" style="font-size: 13px;"></span></div>
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <span id="user-display" style="font-size: 13px;"></span>
+                    <button onclick="editNickname()" title="שנה כינוי" style="background:none; border:none; color:white; cursor:pointer; font-size:14px;">✏️</button>
+                </div>
             </header>
 
             <div id="sidebar">
@@ -392,7 +425,46 @@
             <form id="chat-form">
                 <input type="text" id="chat-input" placeholder="כתוב הודעה..." autocomplete="off">
                 <button type="submit">שלח</button>
+                <button type="button" onclick="toggleVoiceRecord()" id="voice-btn">🎤</button>
             </form>
+        </div>
+    </div>
+
+    <!-- מודל בחירת זמן חסימה מותאם אישית -->
+    <div id="ban-modal">
+        <div class="ban-modal-content">
+            <h4 style="margin:0 0 10px 0;">בחר משך חסימה</h4>
+            <label style="font-size:13px;">בחר משך זמן מוכן:</label>
+            <select id="ban-duration-select" onchange="handleBanSelectChange()">
+                <option value="1h">שעה אחת</option>
+                <option value="2h">שעתיים</option>
+                <option value="5h">5 שעות</option>
+                <option value="24h">יום אחד (24 שעות)</option>
+                <option value="48h">יומיים</option>
+                <option value="168h">שבוע</option>
+                <option value="720h">חודש</option>
+                <option value="custom">התאמה אישית (שעון מעורר)...</option>
+            </select>
+
+            <div id="custom-ban-fields" style="display:none; flex-direction:column; gap:8px; margin-top:5px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px;">
+                    <span>ימים:</span>
+                    <input type="number" id="custom-days" min="0" max="90" value="0" style="width: 60px;">
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px;">
+                    <span>שעות:</span>
+                    <input type="number" id="custom-hours" min="0" max="23" value="1" style="width: 60px;">
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px;">
+                    <span>דקות:</span>
+                    <input type="number" id="custom-minutes" min="0" max="59" value="0" style="width: 60px;">
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
+                <button onclick="closeBanModal()" style="background:#ccc; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">ביטול</button>
+                <button onclick="confirmBanUser()" style="background:#e53935; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">חסום</button>
+            </div>
         </div>
     </div>
 
@@ -421,6 +493,11 @@
         
         const replyPreviewContainer = document.getElementById('reply-preview-container');
         const replyPreviewContent = document.getElementById('reply-preview-content');
+        
+        const banModal = document.getElementById('ban-modal');
+        const banDurationSelect = document.getElementById('ban-duration-select');
+        const customBanFields = document.getElementById('custom-ban-fields');
+        let selectedTargetIdForBan = null;
 
         let currentNickname = localStorage.getItem('chat_nickname') || '';
         let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
@@ -431,11 +508,13 @@
         let unreadScrolledCount = 0;
         let isUserScrolledUp = false;
         let currentReplyingTo = null;
+        let mediaRecorder;
+        let audioChunks = [];
 
         if (currentNickname) {
             loginScreen.style.display = 'none';
             chatScreen.style.display = 'flex';
-            userDisplay.innerText = `מחובר כ: ${currentNickname}`;
+            userDisplay.innerText = currentNickname;
             socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
         }
 
@@ -447,8 +526,19 @@
             socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
             loginScreen.style.display = 'none';
             chatScreen.style.display = 'flex';
-            userDisplay.innerText = `מחובר כ: ${currentNickname}`;
+            userDisplay.innerText = currentNickname;
         });
+
+        function editNickname() {
+            let newNick = prompt('הכנס כינוי חדש:', currentNickname);
+            if (newNick && newNick.trim() !== '') {
+                currentNickname = newNick.trim();
+                localStorage.setItem('chat_nickname', currentNickname);
+                userDisplay.innerText = currentNickname;
+                socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
+                alert עודכן בהצלחה!
+            }
+        }
 
         chatMessages.addEventListener('scroll', () => {
             const threshold = 60;
@@ -497,6 +587,37 @@
                 socket.emit('typing', false);
             }
         });
+
+        function toggleVoiceRecord() {
+            const btn = document.getElementById('voice-btn');
+            if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+                navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        const reader = new FileReader();
+                        reader.readAsDataURL(audioBlob);
+                        reader.onloadend = () => {
+                            socket.emit('chat-message', { 
+                                text: `<audio controls src="${reader.result}"></audio>`, 
+                                nickname: currentNickname, 
+                                type: 'audio',
+                                replyTo: currentReplyingTo ? { id: currentReplyingTo.id, nickname: currentReplyingTo.nickname, text: currentReplyingTo.text } : null
+                            });
+                            cancelReply();
+                        };
+                    };
+                    mediaRecorder.start();
+                    btn.style.background = '#dc3545';
+                    alert('הקלטה התחילה... לחץ שוב על המיקרופון כדי לעצור ולשלוח.');
+                }).catch(err => alert('לא ניתן לגשת למיקרופון.'));
+            } else {
+                mediaRecorder.stop();
+                btn.style.background = '#28a745';
+            }
+        }
 
         menuToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
         closeSidebar.addEventListener('click', () => sidebar.classList.remove('open'));
@@ -594,6 +715,12 @@
             activeMessagesData = activeMessagesData.filter(m => m.id !== messageId);
             const div = document.getElementById(messageId);
             if (div) div.remove();
+        });
+
+        socket.on('banned', (reason) => {
+            alert('הושתה עליך חסימה ממערכת הצ\'אט: ' + (reason || 'אין כניסה.'));
+            localStorage.clear();
+            window.location.reload();
         });
 
         socket.on('kicked', () => {
@@ -742,8 +869,20 @@
             if (isUserAdmin) {
                 sidebarTitle.innerText = "פאנל מנהל מערכת";
 
+                // כפתור ניקוי צ'אט אישי למנהל בלבד
+                const clearChatBtn = document.createElement('button');
+                clearChatBtn.className = 'menu-action-btn';
+                clearChatBtn.style.backgroundColor = '#e53935';
+                clearChatBtn.innerText = '🗑️ נקה היסטוריית צ\'אט נוכחי';
+                clearChatBtn.onclick = () => {
+                    if (confirm('האם לנקות את כל ההודעות בצ\'אט הנוכחי?')) {
+                        socket.emit('clear-current-chat', currentRoomId);
+                    }
+                };
+                sidebarContent.appendChild(clearChatBtn);
+
                 let adminHeaderTitle = document.createElement('div');
-                adminHeaderTitle.innerHTML = '<strong style="color:#d32f2f; font-size:13px;">ניהול משתמשים:</strong>';
+                adminHeaderTitle.innerHTML = '<br><strong style="color:#d32f2f; font-size:13px;">ניהול משתמשים:</strong>';
                 sidebarContent.appendChild(adminHeaderTitle);
 
                 globalUsers.forEach(user => {
@@ -753,10 +892,10 @@
                         let statusHtml = user.online ? `<span class="online-status">מחובר</span>` : `<span class="offline-status">נראה: ${user.lastSeen}</span>`;
                         item.innerHTML = `
                             <span style="flex:1;"><strong>${user.nickname}</strong><br>${statusHtml}</span>
-                            <div style="display:flex; gap:2px;">
-                                <button style="background:#0084ff;color:white;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;" onclick="createPrivateChatWithUser('${user.nickname}')">צ'אט</button>
-                                <button style="background:#4caf50;color:white;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;" onclick="promptRole('${user.id}')">מנהל</button>
-                                ${user.online ? `<button style="background:#e53935;color:white;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;" onclick="kickUser('${user.id}')">הסר</button>` : ''}
+                            <div style="display:flex; gap:2px; flex-wrap:wrap;">
+                                <button style="background:#0084ff;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="createPrivateChatWithUser('${user.nickname}')">צ'אט</button>
+                                <button style="background:#4caf50;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="promptRole('${user.id}')">מנהל</button>
+                                <button style="background:#e53935;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="openBanModal('${user.id}')">חסום</button>
                             </div>
                         `;
                         sidebarContent.appendChild(item);
@@ -833,15 +972,63 @@
             }
         });
 
+        // ניהול מודל חסימות
+        function openBanModal(targetId) {
+            selectedTargetIdForBan = targetId;
+            banDurationSelect.value = "1h";
+            customBanFields.style.display = "none";
+            banModal.style.display = "flex";
+        }
+
+        function closeBanModal() {
+            banModal.style.display = "none";
+            selectedTargetIdForBan = null;
+        }
+
+        function handleBanSelectChange() {
+            if (banDurationSelect.value === "custom") {
+                customBanFields.style.display = "flex";
+            } else {
+                customBanFields.style.display = "none";
+            }
+        }
+
+        function confirmBanUser() {
+            if (!selectedTargetIdForBan) return;
+            let durationMs = 0;
+            let val = banDurationSelect.value;
+
+            if (val === "custom") {
+                let days = parseInt(document.getElementById('custom-days').value) || 0;
+                let hours = parseInt(document.getElementById('custom-hours').value) || 0;
+                let minutes = parseInt(document.getElementById('custom-minutes').value) || 0;
+                durationMs = ((days * 24 + hours) * 60 + minutes) * 60 * 1000;
+                if (durationMs <= 0) {
+                    alert('נא להגדיר זמן חסימה גדול מ-0.');
+                    return;
+                }
+            } else {
+                let hoursMap = {
+                    "1h": 1,
+                    "2h": 2,
+                    "5h": 5,
+                    "24h": 24,
+                    "48h": 48,
+                    "168h": 168,
+                    "720h": 720
+                };
+                durationMs = (hoursMap[val] || 1) * 3600 * 1000;
+            }
+
+            socket.emit('ban-user', { targetId: selectedTargetIdForBan, durationMs: durationMs });
+            closeBanModal();
+        }
+
         function promptRole(targetId) {
             let choice = prompt('הקלד "מנהל" להוספה, או השאר ריק להסרה:');
             if (choice !== null) {
                 socket.emit('set-role', { targetId: targetId, role: choice.trim() === 'מנהל' ? 'מנהל' : null });
             }
-        }
-
-        function kickUser(targetId) {
-            if (confirm('להסיר משתמש זה?')) { socket.emit('kick-user', targetId); }
         }
 
         function deleteRoom(roomId) {
