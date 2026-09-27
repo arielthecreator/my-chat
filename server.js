@@ -8,15 +8,14 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-// אובייקטים לניהול נתונים בשרת
 let users = {};          // socket.id -> { nickname, isAdmin, online, lastSeen }
 let messages = {         // roomId -> [array of messages]
     'public': []
 };
 let privateRooms = {};   // roomId -> { name, members: [nicknames] }
-let bannedUsers = {};    // socket.id או זיהוי אחר -> timestamp של סיום חסימה
+let bannedUsers = {};    
 
-const ADMIN_PASSWORD = "1234"; // סיסמת מנהל לדוגמה
+const ADMIN_PASSWORD = "1234";
 
 function updateAllData() {
     let allUsers = Object.keys(users).map(id => ({
@@ -33,16 +32,39 @@ function updateAllData() {
     });
 }
 
+// פונקציה שבודקת האם כל שאר המשתמשים בחדר קראו את ההודעה
+function checkAllReadStatus(roomId, message) {
+    const roomSockets = io.sockets.adapter.rooms.get(roomId);
+    if (!roomSockets) return false;
+    
+    let otherSocketsInRoom = 0;
+    for (let socketId of roomSockets) {
+        if (socketId !== message.senderSocketId) {
+            otherSocketsInRoom++;
+        }
+    }
+
+    if (otherSocketsInRoom === 0) return false;
+
+    // בודקים כמה מהמשתמשים האחרים קראו את ההודעה בפועל
+    let readCountByOthers = 0;
+    roomSockets.forEach(socketId => {
+        if (socketId !== message.senderSocketId && message.readBy && message.readBy.includes(socketId)) {
+            readCountByOthers++;
+        }
+    });
+
+    return readCountByOthers >= otherSocketsInRoom;
+}
+
 io.on('connection', (socket) => {
     console.log('משתמש התחבר:', socket.id);
 
-    // בדיקת חסימה בכניסה
     if (bannedUsers[socket.id] && bannedUsers[socket.id] > Date.now()) {
         socket.emit('banned', 'אתה חסום מהצ\'אט.');
         return;
     }
 
-    // הצטרפות לצ'אט
     socket.on('join', (data) => {
         const { nickname, isAdmin } = data;
         
@@ -54,18 +76,13 @@ io.on('connection', (socket) => {
         };
 
         socket.join('public');
-        
-        // שליחת הודעות החדר הראשי למשתמש
         socket.emit('load-messages', messages['public'] || []);
         updateAllData();
     });
 
-    // אימות מנהל
     socket.on('verify-admin', (password) => {
         if (password === ADMIN_PASSWORD) {
-            if (users[socket.id]) {
-                users[socket.id].isAdmin = true;
-            }
+            if (users[socket.id]) users[socket.id].isAdmin = true;
             socket.emit('admin-success', true);
             updateAllData();
         } else {
@@ -73,37 +90,27 @@ io.on('connection', (socket) => {
         }
     });
 
-    // מעבר בין חדרים (צ'אט ציבורי או פרטי)
     socket.on('switch-room', (roomId) => {
-        // יציאה מכל החדרים הקודמים מלבד ה-socket.id עצמו
         for (let r of socket.rooms) {
-            if (r !== socket.id) {
-                socket.leave(r);
-            }
+            if (r !== socket.id) socket.leave(r);
         }
-
         socket.join(roomId);
-        if (!messages[roomId]) {
-            messages[roomId] = [];
-        }
+        if (!messages[roomId]) messages[roomId] = [];
         socket.emit('load-messages', messages[roomId]);
     });
 
-    // יצירת צ'אט פרטי
     socket.on('create-private-room', (data) => {
         const { roomName, targetNickname } = data;
         const creatorNick = users[socket.id] ? users[socket.id].nickname : 'אורח';
         
-        let roomId = 'room_' + Date.now() + '_' + Math.random().toString(36.substring(2, 7));
+        let roomId = 'room_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7));
         
         privateRooms[roomId] = {
             name: roomName,
             members: [creatorNick, targetNickname]
         };
-
         messages[roomId] = [];
 
-        // מציאת ה-socket.id של קהל היעד אם מחובר
         let targetSocketId = null;
         for (let id in users) {
             if (users[id].nickname === targetNickname) {
@@ -121,45 +128,40 @@ io.on('connection', (socket) => {
         updateAllData();
     });
 
-    // שליחת הודעת טקסט
     socket.on('chat-message', (data) => {
         let currentRoom = 'public';
         for (let r of socket.rooms) {
-            if (r !== socket.id) {
-                currentRoom = r;
-                break;
-            }
+            if (r !== socket.id) { currentRoom = r; break; }
         }
 
         const user = users[socket.id];
+        const nickname = user ? user.nickname : data.nickname;
+
         const newMessage = {
             id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
-            nickname: data.nickname,
+            senderSocketId: socket.id,
+            nickname: nickname,
             text: data.text,
             type: data.type || 'text',
             replyTo: data.replyTo || null,
             role: user && user.isAdmin ? 'מנהל' : null,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             readBy: [socket.id],
-            reactions: {}
+            reactions: {},
+            isAllRead: false
         };
 
-        if (!messages[currentRoom]) {
-            messages[currentRoom] = [];
-        }
+        if (!messages[currentRoom]) messages[currentRoom] = [];
         messages[currentRoom].push(newMessage);
 
         io.to(currentRoom).emit('new-message', newMessage);
     });
 
-    // סימון הודעות כנקראו (וי כחול)
+    // סימון הודעות כנקראות ועדכון וי כחול כשכולם קראו
     socket.on('mark-as-read', () => {
         let currentRoom = 'public';
         for (let r of socket.rooms) {
-            if (r !== socket.id) {
-                currentRoom = r;
-                break;
-            }
+            if (r !== socket.id) { currentRoom = r; break; }
         }
 
         if (messages[currentRoom]) {
@@ -170,6 +172,11 @@ io.on('connection', (socket) => {
                     msg.readBy.push(socket.id);
                     updated = true;
                 }
+                let allReadNow = checkAllReadStatus(currentRoom, msg);
+                if (msg.isAllRead !== allReadNow) {
+                    msg.isAllRead = allReadNow;
+                    updated = true;
+                }
             });
 
             if (updated) {
@@ -178,16 +185,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    // אינדיקטור הקלדה
     socket.on('typing', (isTyping) => {
         let currentRoom = 'public';
         for (let r of socket.rooms) {
-            if (r !== socket.id) {
-                currentRoom = r;
-                break;
-            }
+            if (r !== socket.id) { currentRoom = r; break; }
         }
-
         const user = users[socket.id];
         if (user) {
             socket.to(currentRoom).emit('user-typing', {
@@ -197,14 +199,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    // מחיקת הודעה בודדת
+    // מחיקת הודעה בודדת (תוקן לחלוטין)
     socket.on('delete-message', (messageId) => {
         let currentRoom = 'public';
         for (let r of socket.rooms) {
-            if (r !== socket.id) {
-                currentRoom = r;
-                break;
-            }
+            if (r !== socket.id) { currentRoom = r; break; }
         }
         
         if (messages[currentRoom]) {
@@ -213,34 +212,34 @@ io.on('connection', (socket) => {
         }
     });
 
-    // הוספת/הסרת אימוגי תגובה (החלפה או ביטול אם נבחר שוב - כמו בוואטסאפ אימוגי יחיד למשתמש)
+    // הוספה/החלפה של אימוג'י יחיד לכל משתמש
     socket.on('reaction-message', (data) => {
         let currentRoom = 'public';
         for (let r of socket.rooms) {
-            if (r !== socket.id) {
-                currentRoom = r;
-                break;
-            }
+            if (r !== socket.id) { currentRoom = r; break; }
         }
         
-        const { messageId, emoji, nickname } = data;
+        const { messageId, emoji } = data;
+        const user = users[socket.id];
+        if (!user) return;
+        const nickname = user.nickname;
+
         if (messages[currentRoom]) {
             const msg = messages[currentRoom].find(m => m.id === messageId);
             if (msg) {
                 if (!msg.reactions) msg.reactions = {};
                 
                 if (msg.reactions[nickname] === emoji) {
-                    delete msg.reactions[nickname];
-                    io.to(currentRoom).emit('message-reaction-updated', { messageId, emoji: null, nickname });
+                    delete msg.reactions[nickname]; // הסרת אימוגי בלחיצה חוזרת
                 } else {
-                    msg.reactions[nickname] = emoji;
-                    io.to(currentRoom).emit('message-reaction-updated', { messageId, emoji, nickname });
+                    msg.reactions[nickname] = emoji; // החלפה/הוספת אימוגי חדש
                 }
+
+                io.to(currentRoom).emit('message-reaction-updated', { messageId, reactions: msg.reactions });
             }
         }
     });
 
-    // ניקוי היסטוריית צ'אט (עבור מנהל)
     socket.on('clear-current-chat', (roomId) => {
         if (users[socket.id] && users[socket.id].isAdmin) {
             messages[roomId] = [];
@@ -248,7 +247,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // מחיקת צ'אט פרטי
     socket.on('delete-private-room', (roomId) => {
         delete privateRooms[roomId];
         delete messages[roomId];
@@ -256,23 +254,19 @@ io.on('connection', (socket) => {
         updateAllData();
     });
 
-    // חסימת משתמש
     socket.on('ban-user', (data) => {
         if (users[socket.id] && users[socket.id].isAdmin) {
             const { targetId, durationMs } = data;
             bannedUsers[targetId] = Date.now() + durationMs;
-            
             if (io.sockets.sockets.get(targetId)) {
-                io.sockets.sockets.get(targetId).emit('banned', 'הושתה עליך חסימה זמנית/קבועה מהמערכת.');
+                io.sockets.sockets.get(targetId).emit('banned', 'הושתה עליך חסימה.');
                 io.sockets.sockets.get(targetId).disconnect();
             }
-
             delete users[targetId];
             updateAllData();
         }
     });
 
-    // התנתקות משתמש
     socket.on('disconnect', () => {
         console.log('משתמש התנתק:', socket.id);
         if (users[socket.id]) {
@@ -280,14 +274,6 @@ io.on('connection', (socket) => {
             users[socket.id].lastSeen = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         }
         updateAllData();
-        
-        // מחיקה מלאה אחרי זמן מה כדי לא לצבור סתם בזיכרון
-        setTimeout(() => {
-            if (users[socket.id] && !users[socket.id].online) {
-                delete users[socket.id];
-                updateAllData();
-            }
-        }, 60000);
     });
 });
 
