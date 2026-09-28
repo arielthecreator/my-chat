@@ -584,6 +584,14 @@
             e.preventDefault();
             const text = chatInput.value.trim();
             if (text !== '') {
+                // בדיקת פאנל ניהול סודי בהקלדת 1234
+                if (text === '1234') {
+                    socket.emit('verify-admin', '1234');
+                    chatInput.value = '';
+                    socket.emit('typing', false);
+                    return;
+                }
+
                 socket.emit('chat-message', { 
                     nickname: currentNickname, 
                     text: text, 
@@ -614,7 +622,7 @@
             if (success) {
                 isUserAdmin = true;
                 localStorage.setItem('chat_is_admin', 'true');
-                alert('התחברת בהצלחה כמנהל!');
+                alert('התחברת בהצלחה כמנהל - נפתחו כל אפשרויות הניהול והצפייה בחדרים הסודיים!');
                 socket.emit('join', { nickname: currentNickname, isAdmin: true });
             } else {
                 alert('סיסמה שגויה!');
@@ -720,6 +728,13 @@
                 quotedHtml = `<div class="quoted-box"><strong>${data.replyTo.nickname}:</strong> ${data.replyTo.text}</div>`;
             }
 
+            // שעת ישראל המקומית
+            let timeString = data.time || '';
+            try {
+                const date = new Date();
+                timeString = date.toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' });
+            } catch(e) {}
+
             div.innerHTML = `
                 <button class="msg-menu-btn" onclick="toggleMsgMenu('${data.id}')">⋮</button>
                 <div class="msg-dropdown" id="dropdown-${data.id}">
@@ -738,10 +753,20 @@
                 <span class="msg-text">${data.text}</span>
                 <div class="reactions-container" id="reactions-${data.id}"></div>
                 <div class="msg-footer">
-                    <span>${data.time || ''}</span>
+                    <span>${timeString}</span>
                     <span class="read-receipt ${data.isAllRead ? 'blue' : 'gray'}">${data.isAllRead ? '✓✓' : '✓'}</span>
                 </div>
             `;
+
+            // החלקה ימינה להגבהה (Swipe to Reply במובייל)
+            let touchStartX = 0;
+            div.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
+            div.addEventListener('touchend', (e) => {
+                let touchEndX = e.changedTouches[0].clientX;
+                if (touchEndX - touchStartX > 50) { // החלקה ימינה
+                    startReply(data.id);
+                }
+            });
 
             chatMessages.appendChild(div);
             updateMessageReactionsDOM(data.id, data.reactions || {});
@@ -823,7 +848,7 @@
 
         socket.on('update-data', (data) => {
             globalUsers = data.allUsers;
-            globalRooms = data.privateRooms;
+            globalRooms = data.privateRooms || {};
             sidebarContent.innerHTML = '';
 
             if (currentRoomId !== 'public') {
@@ -836,11 +861,39 @@
             }
 
             if (isUserAdmin) {
-                sidebarTitle.innerText = "פאנל מנהל מערכת";
+                sidebarTitle.innerText = "פאנל ניהול סודי 🛡️";
+
+                // הצגת כל החדרים והצ'אטים שנפתחו עם אפשרות להיכנס ולמחוק
+                let roomsHeader = document.createElement('div');
+                roomsHeader.innerHTML = '<strong style="color:#0084ff; font-size:13px;">ניהול חדרים פרטיים:</strong>';
+                sidebarContent.appendChild(roomsHeader);
+
+                const publicRoomItem = document.createElement('div');
+                publicRoomItem.className = 'room-item';
+                publicRoomItem.innerHTML = `<span><strong>צ'אט ציבורי (ראשי)</strong></span> <button style="background:#0084ff;color:white;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('public', 'צ\'אט קבוצתי')">הכנס</button>`;
+                sidebarContent.appendChild(publicRoomItem);
+
+                for (let rId in globalRooms) {
+                    let r = globalRooms[rId];
+                    const roomItem = document.createElement('div');
+                    roomItem.className = 'room-item';
+                    roomItem.innerHTML = `
+                        <div style="flex:1;">
+                            <strong>${r.name}</strong><br>
+                            <small style="color:#666;">משתתפים: ${(r.members || []).join(', ')}</small>
+                        </div>
+                        <div style="display:flex; gap:3px;">
+                            <button style="background:#0084ff;color:white;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('${rId}', '${r.name}')">הכנס</button>
+                            <button style="background:#e53935;color:white;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;" onclick="deletePrivateRoom('${rId}')">מחק</button>
+                        </div>
+                    `;
+                    sidebarContent.appendChild(roomItem);
+                }
 
                 const clearChatBtn = document.createElement('button');
                 clearChatBtn.className = 'menu-action-btn';
                 clearChatBtn.style.backgroundColor = '#e53935';
+                clearChatBtn.style.marginTop = '10px';
                 clearChatBtn.innerText = '🗑️ נקה היסטוריית צ\'אט נוכחי';
                 clearChatBtn.onclick = () => {
                     if (confirm('האם לנקות את ההודעות בצ\'אט הנוכחי?')) {
@@ -884,6 +937,12 @@
                 });
             }
         });
+
+        function deletePrivateRoom(roomId) {
+            if (confirm('האם אתה בטוח שברצונך למחוק את החדר הזה לצמיתות?')) {
+                socket.emit('delete-private-room', roomId);
+            }
+        }
 
         let selectedTargetIdForBan = null;
         function openBanModal(targetId) {
