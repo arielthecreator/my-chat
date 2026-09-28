@@ -853,15 +853,31 @@
             if (isUserAdmin) {
                 sidebarTitle.innerText = "פאנל ניהול סודי 🛡️";
 
-                // 1. למעלה: הצגת כל החדרים והצ'אטים האישיים
-                let roomsHeader = document.createElement('div');
-                roomsHeader.innerHTML = '<strong style="color:#0084ff; font-size:13px;">💬 כל החדרים והצ\'אטים:</strong>';
-                sidebarContent.appendChild(roomsHeader);
+                // 1. למעלה: רשימת משתמשים וניהול
+                let adminHeaderTitle = document.createElement('div');
+                adminHeaderTitle.innerHTML = '<strong style="color:#d32f2f; font-size:13px;">👥 רשימת משתמשים:</strong>';
+                sidebarContent.appendChild(adminHeaderTitle);
 
-                const publicRoomItem = document.createElement('div');
-                publicRoomItem.className = 'room-item';
-                publicRoomItem.innerHTML = `<span><strong>צ'אט ציבורי (ראשי)</strong></span> <button style="background:#0084ff;color:white;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('public', 'צ\'אט קבוצתי')">הכנס</button>`;
-                sidebarContent.appendChild(publicRoomItem);
+                globalUsers.forEach(user => {
+                    if (user.nickname !== currentNickname) {
+                        const item = document.createElement('div');
+                        item.className = 'user-mgmt-item';
+                        let statusHtml = user.online ? `<span class="online-status">מחובר</span>` : `<span class="offline-status">נראה: ${user.lastSeen}</span>`;
+                        item.innerHTML = `
+                            <span style="flex:1;"><strong>${user.nickname}</strong><br>${statusHtml}</span>
+                            <div style="display:flex; gap:2px;">
+                                <button style="background:#0084ff;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="createPrivateChatWithUser('${user.nickname}')">צ'אט</button>
+                                <button style="background:#e53935;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="openBanModal('${user.id}')">חסום</button>
+                            </div>
+                        `;
+                        sidebarContent.appendChild(item);
+                    }
+                });
+
+                // 2. למטה: ניהול חדרים פרטיים וצ'אטים פעילים
+                let roomsHeader = document.createElement('div');
+                roomsHeader.innerHTML = '<br><strong style="color:#0084ff; font-size:13px;">💬 חדרים וצ\'אטים פרטיים:</strong>';
+                sidebarContent.appendChild(roomsHeader);
 
                 for (let rId in globalRooms) {
                     let r = globalRooms[rId];
@@ -883,7 +899,7 @@
                 const clearChatBtn = document.createElement('button');
                 clearChatBtn.className = 'menu-action-btn';
                 clearChatBtn.style.backgroundColor = '#e53935';
-                clearChatBtn.style.marginTop = '6px';
+                clearChatBtn.style.marginTop = '10px';
                 clearChatBtn.innerText = '🗑️ נקה היסטוריית צ\'אט נוכחי';
                 clearChatBtn.onclick = () => {
                     if (confirm('האם לנקות את ההודעות בצ\'אט הנוכחי?')) {
@@ -892,26 +908,6 @@
                 };
                 sidebarContent.appendChild(clearChatBtn);
 
-                // 2. מתחת: ניהול משתמשים ורשימת האנשים
-                let adminHeaderTitle = document.createElement('div');
-                adminHeaderTitle.innerHTML = '<br><strong style="color:#d32f2f; font-size:13px;">👥 רשימת משתמשים:</strong>';
-                sidebarContent.appendChild(adminHeaderTitle);
-
-                globalUsers.forEach(user => {
-                    if (user.nickname !== currentNickname) {
-                        const item = document.createElement('div');
-                        item.className = 'user-mgmt-item';
-                        let statusHtml = user.online ? `<span class="online-status">מחובר</span>` : `<span class="offline-status">נראה: ${user.lastSeen}</span>`;
-                        item.innerHTML = `
-                            <span style="flex:1;"><strong>${user.nickname}</strong><br>${statusHtml}</span>
-                            <div style="display:flex; gap:2px;">
-                                <button style="background:#0084ff;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="createPrivateChatWithUser('${user.nickname}')">צ'אט</button>
-                                <button style="background:#e53935;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="openBanModal('${user.id}')">חסום</button>
-                            </div>
-                        `;
-                        sidebarContent.appendChild(item);
-                    }
-                });
             } else {
                 sidebarTitle.innerText = "משתמשים מחוברים";
                 globalUsers.forEach(user => {
