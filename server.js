@@ -101,7 +101,7 @@ io.on('connection', (socket) => {
         const { roomName, targetNickname } = data;
         const creatorNick = users[socket.id] ? users[socket.id].nickname : 'אורח';
         
-        let roomId = 'room_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7));
+        let roomId = 'room_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
         
         privateRooms[roomId] = {
             name: roomName,
