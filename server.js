@@ -66,6 +66,13 @@ io.on('connection', (socket) => {
     socket.on('join', (data) => {
         const { nickname, isAdmin } = data;
         
+        // מחיקת מופעים קודמים של אותו כינוי כדי למנוע כפילויות ברשימה
+        for (let id in users) {
+            if (users[id].nickname === nickname && id !== socket.id) {
+                delete users[id];
+            }
+        }
+        
         users[socket.id] = {
             nickname: nickname,
             isAdmin: isAdmin || false,
