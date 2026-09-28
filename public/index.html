@@ -628,8 +628,7 @@
         }
 
         socket.on('room-created', (roomId) => {
-            let roomObj = globalRooms[roomId];
-            switchToRoom(roomId, roomObj ? roomObj.name : 'צ\'אט אישי');
+            switchToRoom(roomId, globalRooms[roomId] ? globalRooms[roomId].name : 'צ\'אט אישי');
         });
 
         function switchToRoom(roomId, roomTitle) {
@@ -837,8 +836,14 @@
         }
 
         socket.on('update-data', (data) => {
-            globalUsers = data.allUsers;
+            // מניעת כפילויות של משתמשים לפי הכינוי שלהם
+            let uniqueUsersMap = {};
+            (data.allUsers || []).forEach(u => {
+                uniqueUsersMap[u.nickname] = u;
+            });
+            globalUsers = Object.values(uniqueUsersMap);
             globalRooms = data.privateRooms || {};
+            
             sidebarContent.innerHTML = '';
 
             if (currentRoomId !== 'public') {
@@ -853,9 +858,21 @@
             if (isUserAdmin) {
                 sidebarTitle.innerText = "פאנל ניהול סודי 🛡️";
 
-                // 1. למעלה: רשימת משתמשים וניהול
+                // 1. הכפתור של ניקוי הצ'אט הנוכחי - הכי למעלה!
+                const clearChatBtn = document.createElement('button');
+                clearChatBtn.className = 'menu-action-btn';
+                clearChatBtn.style.backgroundColor = '#e53935';
+                clearChatBtn.innerText = '🗑️ נקה היסטוריית צ\'אט נוכחי';
+                clearChatBtn.onclick = () => {
+                    if (confirm('האם לנקות את ההודעות בצ\'אט הנוכחי?')) {
+                        socket.emit('clear-current-chat', currentRoomId);
+                    }
+                };
+                sidebarContent.appendChild(clearChatBtn);
+
+                // 2. למעלה: רשימת משתמשים
                 let adminHeaderTitle = document.createElement('div');
-                adminHeaderTitle.innerHTML = '<strong style="color:#d32f2f; font-size:13px;">👥 רשימת משתמשים:</strong>';
+                adminHeaderTitle.innerHTML = '<br><strong style="color:#d32f2f; font-size:13px;">👥 רשימת משתמשים:</strong>';
                 sidebarContent.appendChild(adminHeaderTitle);
 
                 globalUsers.forEach(user => {
@@ -874,7 +891,7 @@
                     }
                 });
 
-                // 2. למטה: ניהול חדרים פרטיים וצ'אטים פעילים
+                // 3. למטה: חדרים וצ'אטים פרטיים
                 let roomsHeader = document.createElement('div');
                 roomsHeader.innerHTML = '<br><strong style="color:#0084ff; font-size:13px;">💬 חדרים וצ\'אטים פרטיים:</strong>';
                 sidebarContent.appendChild(roomsHeader);
@@ -895,18 +912,6 @@
                     `;
                     sidebarContent.appendChild(roomItem);
                 }
-
-                const clearChatBtn = document.createElement('button');
-                clearChatBtn.className = 'menu-action-btn';
-                clearChatBtn.style.backgroundColor = '#e53935';
-                clearChatBtn.style.marginTop = '10px';
-                clearChatBtn.innerText = '🗑️ נקה היסטוריית צ\'אט נוכחי';
-                clearChatBtn.onclick = () => {
-                    if (confirm('האם לנקות את ההודעות בצ\'אט הנוכחי?')) {
-                        socket.emit('clear-current-chat', currentRoomId);
-                    }
-                };
-                sidebarContent.appendChild(clearChatBtn);
 
             } else {
                 sidebarTitle.innerText = "משתמשים מחוברים";
