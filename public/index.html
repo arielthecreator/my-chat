@@ -189,9 +189,7 @@
             box-shadow: 0 1px 2px rgba(0,0,0,0.05);
             position: relative;
         }
-        .reaction-badge:hover {
-            background: #f0f0f0;
-        }
+        .reaction-badge:hover { background: #f0f0f0; }
         .reaction-tooltip {
             display: none;
             position: absolute;
@@ -206,9 +204,7 @@
             z-index: 20;
             box-shadow: 0 2px 5px rgba(0,0,0,0.3);
         }
-        .reaction-badge:hover .reaction-tooltip {
-            display: block;
-        }
+        .reaction-badge:hover .reaction-tooltip { display: block; }
 
         #reply-preview-container {
             display: none;
@@ -397,10 +393,7 @@
             border-bottom: 1px solid #eee;
             background: #fafafa;
         }
-        .emoji-picker-row span {
-            cursor: pointer;
-            font-size: 16px;
-        }
+        .emoji-picker-row span { cursor: pointer; font-size: 16px; }
         
         #ban-modal {
             display: none;
@@ -584,7 +577,6 @@
             e.preventDefault();
             const text = chatInput.value.trim();
             if (text !== '') {
-                // בדיקת פאנל ניהול סודי בהקלדת 1234
                 if (text === '1234') {
                     socket.emit('verify-admin', '1234');
                     chatInput.value = '';
@@ -622,7 +614,7 @@
             if (success) {
                 isUserAdmin = true;
                 localStorage.setItem('chat_is_admin', 'true');
-                alert('התחברת בהצלחה כמנהל - נפתחו כל אפשרויות הניהול והצפייה בחדרים הסודיים!');
+                alert('התחברת בהצלחה כמנהל!');
                 socket.emit('join', { nickname: currentNickname, isAdmin: true });
             } else {
                 alert('סיסמה שגויה!');
@@ -646,7 +638,7 @@
             if ((!finalTitle || finalTitle === 'undefined') && globalRooms[roomId]) {
                 finalTitle = globalRooms[roomId].name;
             }
-            chatTitle.innerText = finalTitle || 'צ\'אט אישי';
+            chatTitle.innerText = finalTitle || (roomId === 'public' ? 'צ\'אט קבוצתי' : 'צ\'אט אישי');
             sidebar.classList.remove('open');
             socket.emit('switch-room', roomId);
         }
@@ -728,7 +720,6 @@
                 quotedHtml = `<div class="quoted-box"><strong>${data.replyTo.nickname}:</strong> ${data.replyTo.text}</div>`;
             }
 
-            // שעת ישראל המקומית
             let timeString = data.time || '';
             try {
                 const date = new Date();
@@ -758,12 +749,11 @@
                 </div>
             `;
 
-            // החלקה ימינה להגבהה (Swipe to Reply במובייל)
             let touchStartX = 0;
             div.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
             div.addEventListener('touchend', (e) => {
                 let touchEndX = e.changedTouches[0].clientX;
-                if (touchEndX - touchStartX > 50) { // החלקה ימינה
+                if (touchEndX - touchStartX > 50) {
                     startReply(data.id);
                 }
             });
@@ -863,9 +853,9 @@
             if (isUserAdmin) {
                 sidebarTitle.innerText = "פאנל ניהול סודי 🛡️";
 
-                // הצגת כל החדרים והצ'אטים שנפתחו עם אפשרות להיכנס ולמחוק
+                // 1. למעלה: הצגת כל החדרים והצ'אטים האישיים
                 let roomsHeader = document.createElement('div');
-                roomsHeader.innerHTML = '<strong style="color:#0084ff; font-size:13px;">ניהול חדרים פרטיים:</strong>';
+                roomsHeader.innerHTML = '<strong style="color:#0084ff; font-size:13px;">💬 כל החדרים והצ\'אטים:</strong>';
                 sidebarContent.appendChild(roomsHeader);
 
                 const publicRoomItem = document.createElement('div');
@@ -893,7 +883,7 @@
                 const clearChatBtn = document.createElement('button');
                 clearChatBtn.className = 'menu-action-btn';
                 clearChatBtn.style.backgroundColor = '#e53935';
-                clearChatBtn.style.marginTop = '10px';
+                clearChatBtn.style.marginTop = '6px';
                 clearChatBtn.innerText = '🗑️ נקה היסטוריית צ\'אט נוכחי';
                 clearChatBtn.onclick = () => {
                     if (confirm('האם לנקות את ההודעות בצ\'אט הנוכחי?')) {
@@ -902,8 +892,9 @@
                 };
                 sidebarContent.appendChild(clearChatBtn);
 
+                // 2. מתחת: ניהול משתמשים ורשימת האנשים
                 let adminHeaderTitle = document.createElement('div');
-                adminHeaderTitle.innerHTML = '<br><strong style="color:#d32f2f; font-size:13px;">ניהול משתמשים:</strong>';
+                adminHeaderTitle.innerHTML = '<br><strong style="color:#d32f2f; font-size:13px;">👥 רשימת משתמשים:</strong>';
                 sidebarContent.appendChild(adminHeaderTitle);
 
                 globalUsers.forEach(user => {
