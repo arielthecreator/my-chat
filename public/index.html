@@ -622,13 +622,14 @@
         });
 
         function createPrivateChatWithUser(targetUser) {
-            let roomName = prompt(`איך תרצה לקרוא לצ'אט האישי עם ${targetUser}?`, `צ'אט עם ${targetUser}`);
+            let roomName = prompt(`איך תרצה לקרוא לצ'אט האישיกับ ${targetUser}?`, `צ'אט עם ${targetUser}`);
             if (!roomName || !roomName.trim()) return;
             socket.emit('create-private-room', { roomName: roomName.trim(), targetNickname: targetUser });
         }
 
         socket.on('room-created', (roomId) => {
-            switchToRoom(roomId, globalRooms[roomId] ? globalRooms[roomId].name : 'צ\'אט אישי');
+            let roomName = globalRooms[roomId] ? globalRooms[roomId].name : 'צ\'אט אישי';
+            switchToRoom(roomId, roomName);
         });
 
         function switchToRoom(roomId, roomTitle) {
@@ -836,7 +837,6 @@
         }
 
         socket.on('update-data', (data) => {
-            // מניעת כפילויות של משתמשים לפי הכינוי שלהם
             let uniqueUsersMap = {};
             (data.allUsers || []).forEach(u => {
                 uniqueUsersMap[u.nickname] = u;
@@ -858,7 +858,7 @@
             if (isUserAdmin) {
                 sidebarTitle.innerText = "פאנל ניהול סודי 🛡️";
 
-                // 1. הכפתור של ניקוי הצ'אט הנוכחי - הכי למעלה!
+                // 1. כפתור ניקוי הצ'אט - הכי למעלה
                 const clearChatBtn = document.createElement('button');
                 clearChatBtn.className = 'menu-action-btn';
                 clearChatBtn.style.backgroundColor = '#e53935';
@@ -891,7 +891,7 @@
                     }
                 });
 
-                // 3. למטה: חדרים וצ'אטים פרטיים
+                // 3. למטה: חדרים וצ'אטים פרטיים עם פונקציית כניסה ישירה
                 let roomsHeader = document.createElement('div');
                 roomsHeader.innerHTML = '<br><strong style="color:#0084ff; font-size:13px;">💬 חדרים וצ\'אטים פרטיים:</strong>';
                 sidebarContent.appendChild(roomsHeader);
