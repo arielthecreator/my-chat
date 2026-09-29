@@ -720,7 +720,6 @@
                 quotedHtml = `<div class="quoted-box"><strong>${data.replyTo.nickname}:</strong> ${data.replyTo.text}</div>`;
             }
 
-            // השעה מגיעה ישירות מהשרת (שעון ירושלים) ונשארת קבועה
             let timeString = data.time || '';
 
             div.innerHTML = `
@@ -888,7 +887,7 @@
                     }
                 });
 
-                // 3. למטה: חדרים וצ'אטים פרטיים
+                // 3. למטה: חדרים וצ'אטים פרטיים - עם הקריאה הישירה ל-switchToRoom
                 let roomsHeader = document.createElement('div');
                 roomsHeader.innerHTML = '<br><strong style="color:#0084ff; font-size:13px;">💬 חדרים וצ\'אטים פרטיים:</strong>';
                 sidebarContent.appendChild(roomsHeader);
@@ -903,7 +902,7 @@
                             <small style="color:#666;">משתתפים: ${(r.members || []).join(', ')}</small>
                         </div>
                         <div style="display:flex; gap:3px;">
-                            <button style="background:#0084ff;color:white;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('${rId}', '${r.name}')">הכנס</button>
+                            <button style="background:#0084ff;color:white;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;" onclick="switchToRoom('${rId}', \`${r.name}\`)">הכנס</button>
                             <button style="background:#e53935;color:white;border:none;padding:3px 6px;border-radius:3px;cursor:pointer;" onclick="deletePrivateRoom('${rId}')">מחק</button>
                         </div>
                     `;
