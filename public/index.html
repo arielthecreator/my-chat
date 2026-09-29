@@ -622,14 +622,14 @@
         });
 
         function createPrivateChatWithUser(targetUser) {
-            let roomName = prompt(`איך תרצה לקרוא לצ'אט האישיกับ ${targetUser}?`, `צ'אט עם ${targetUser}`);
+            let roomName = prompt(`איך תרצה לקרוא לצ'אט האישי עם ${targetUser}?`, `צ'אט עם ${targetUser}`);
             if (!roomName || !roomName.trim()) return;
             socket.emit('create-private-room', { roomName: roomName.trim(), targetNickname: targetUser });
         }
 
         socket.on('room-created', (roomId) => {
-            let roomName = globalRooms[roomId] ? globalRooms[roomId].name : 'צ\'אט אישי';
-            switchToRoom(roomId, roomName);
+            let roomObj = globalRooms[roomId];
+            switchToRoom(roomId, roomObj ? roomObj.name : 'צ\'אט אישי');
         });
 
         function switchToRoom(roomId, roomTitle) {
@@ -720,11 +720,8 @@
                 quotedHtml = `<div class="quoted-box"><strong>${data.replyTo.nickname}:</strong> ${data.replyTo.text}</div>`;
             }
 
+            // השעה מגיעה מהשרת כמו שהיא בזמן השליחה ולא מתעדכנת יותר
             let timeString = data.time || '';
-            try {
-                const date = new Date();
-                timeString = date.toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' });
-            } catch(e) {}
 
             div.innerHTML = `
                 <button class="msg-menu-btn" onclick="toggleMsgMenu('${data.id}')">⋮</button>
@@ -891,7 +888,7 @@
                     }
                 });
 
-                // 3. למטה: חדרים וצ'אטים פרטיים עם פונקציית כניסה ישירה
+                // 3. למטה: חדרים וצ'אטים פרטיים
                 let roomsHeader = document.createElement('div');
                 roomsHeader.innerHTML = '<br><strong style="color:#0084ff; font-size:13px;">💬 חדרים וצ\'אטים פרטיים:</strong>';
                 sidebarContent.appendChild(roomsHeader);
