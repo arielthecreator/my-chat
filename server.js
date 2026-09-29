@@ -149,7 +149,7 @@ io.on('connection', (socket) => {
             type: data.type || 'text',
             replyTo: data.replyTo || null,
             role: user && user.isAdmin ? 'מנהל' : null,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            time: new Date().toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' }),
             readBy: [socket.id],
             reactions: {},
             isAllRead: false
@@ -272,7 +272,7 @@ io.on('connection', (socket) => {
         console.log('משתמש התנתק:', socket.id);
         if (users[socket.id]) {
             users[socket.id].online = false;
-            users[socket.id].lastSeen = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            users[socket.id].lastSeen = new Date().toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' });
         }
         updateAllData();
     });
