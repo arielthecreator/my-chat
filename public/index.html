@@ -720,7 +720,7 @@
                 quotedHtml = `<div class="quoted-box"><strong>${data.replyTo.nickname}:</strong> ${data.replyTo.text}</div>`;
             }
 
-            // השעה מגיעה מהשרת כמו שהיא בזמן השליחה ולא מתעדכנת יותר
+            // השעה מגיעה ישירות מהשרת (שעון ירושלים) ונשארת קבועה
             let timeString = data.time || '';
 
             div.innerHTML = `
