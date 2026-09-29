@@ -26,6 +26,7 @@ function updateAllData() {
         lastSeen: users[id].lastSeen
     }));
 
+    // שליחת כל הנתונים לכלל המשתמשים כדי שגם משתמשים רגילים וגם מנהלים יראו את החדרים שלהם
     io.emit('update-data', {
         allUsers: allUsers,
         privateRooms: privateRooms
