@@ -854,7 +854,6 @@
             if (isUserAdmin) {
                 sidebarTitle.innerText = "פאנל ניהול סודי 🛡️";
 
-                // 1. כפתור ניקוי הצ'אט - הכי למעלה
                 const clearChatBtn = document.createElement('button');
                 clearChatBtn.className = 'menu-action-btn';
                 clearChatBtn.style.backgroundColor = '#e53935';
@@ -866,7 +865,6 @@
                 };
                 sidebarContent.appendChild(clearChatBtn);
 
-                // 2. למעלה (ירוק): רשימת משתמשים עם אפשרות לפתוח איתם צ'אט
                 let adminHeaderTitle = document.createElement('div');
                 adminHeaderTitle.innerHTML = '<br><strong style="color:#d32f2f; font-size:13px;">👥 רשימת משתמשים:</strong>';
                 sidebarContent.appendChild(adminHeaderTitle);
@@ -887,7 +885,6 @@
                     }
                 });
 
-                // 3. למטה (אדום): כל החדרים והצ'אטים האישיים שקיימים במערכת (כי אתה המנהל עם הסיסמה)
                 let roomsHeader = document.createElement('div');
                 roomsHeader.innerHTML = '<br><strong style="color:#0084ff; font-size:13px;">💬 חדרים וצ\'אטים פרטיים:</strong>';
                 sidebarContent.appendChild(roomsHeader);
@@ -910,10 +907,8 @@
                 }
 
             } else {
-                // משתמש רגיל
                 sidebarTitle.innerText = "משתמשים מחוברים";
                 
-                // 1. למעלה (ירוק): רשימת משתמשים כללית לפתיחת צ'אט
                 let usersHeaderTitle = document.createElement('div');
                 usersHeaderTitle.innerHTML = '<strong style="color:#2e7d32; font-size:13px;">👥 רשימת משתמשים:</strong>';
                 sidebarContent.appendChild(usersHeaderTitle);
@@ -931,7 +926,6 @@
                     }
                 });
 
-                // 2. למטה (אדום): רק החדרים והצ'אטים האישיים שלו (שפתח או שפתחו איתו)
                 let roomsHeader = document.createElement('div');
                 roomsHeader.innerHTML = '<br><strong style="color:#0084ff; font-size:13px;">💬 חדרים וצ\'אטים פרטיים:</strong>';
                 sidebarContent.appendChild(roomsHeader);
@@ -966,7 +960,6 @@
                 }
             }
 
-            // מאזין כפתורי כניסה לחדרים
             setTimeout(() => {
                 document.querySelectorAll('.enter-room-btn').forEach(btn => {
                     btn.onclick = function() {
