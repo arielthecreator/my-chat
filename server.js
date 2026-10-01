@@ -26,7 +26,6 @@ function updateAllData() {
         lastSeen: users[id].lastSeen
     }));
 
-    // שליחת כל הנתונים לכלל המשתמשים כדי שגם משתמשים רגילים וגם מנהלים יראו את החדרים שלהם
     io.emit('update-data', {
         allUsers: allUsers,
         privateRooms: privateRooms
@@ -108,6 +107,33 @@ io.on('connection', (socket) => {
         const { roomName, targetNickname } = data;
         const creatorNick = users[socket.id] ? users[socket.id].nickname : 'אורח';
         
+        // בדיקה האם כבר קיים צ'אט פרטי בדיוק בין שני המשתמשים האלו כדי למנוע שכפולים!
+        let existingRoomId = null;
+        for (let rId in privateRooms) {
+            let members = privateRooms[rId].members;
+            if (members && members.includes(creatorNick) && members.includes(targetNickname) && members.length === 2) {
+                existingRoomId = rId;
+                break;
+            }
+        }
+
+        if (existingRoomId) {
+            // אם כבר קיים, פשוט נכניס אליו במקום ליצור חדש
+            let targetSocketId = null;
+            for (let id in users) {
+                if (users[id].nickname === targetNickname) {
+                    targetSocketId = id;
+                    break;
+                }
+            }
+            socket.join(existingRoomId);
+            if (targetSocketId && io.sockets.sockets.get(targetSocketId)) {
+                io.sockets.sockets.get(targetSocketId).join(existingRoomId);
+            }
+            socket.emit('room-created', existingRoomId);
+            return;
+        }
+
         let roomId = 'room_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
         
         privateRooms[roomId] = {
