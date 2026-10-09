@@ -75,12 +75,28 @@
             align-items: center;
             flex-shrink: 0;
         }
+        .menu-btn-wrapper {
+            position: relative;
+            display: inline-block;
+        }
         .menu-btn {
             background: none;
             border: none;
             color: white;
             font-size: 22px;
             cursor: pointer;
+        }
+        #menu-global-badge {
+            position: absolute;
+            top: -2px;
+            right: -5px;
+            background: #e53935;
+            color: white;
+            font-size: 10px;
+            padding: 1px 5px;
+            border-radius: 50%;
+            font-weight: bold;
+            display: none;
         }
         #chat-title {
             margin: 0;
@@ -422,9 +438,7 @@
             border-radius: 10px;
             margin-right: 5px;
             font-weight: bold;
-            animation: pulse 1s infinite;
         }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
@@ -440,7 +454,10 @@
 
         <div id="chat-screen">
             <header>
-                <button class="menu-btn" id="menu-toggle">☰</button>
+                <div class="menu-btn-wrapper">
+                    <button class="menu-btn" id="menu-toggle">☰</button>
+                    <span id="menu-global-badge">0</span>
+                </div>
                 <h3 id="chat-title">צ'אט קבוצתי</h3>
                 <div style="display:flex; align-items:center; gap:5px;">
                     <span id="user-display" style="font-size: 13px;"></span>
@@ -491,16 +508,16 @@
         </div>
     </div>
 
-    <!-- מודל פתיחת קבוצת כמה אנשים -->
+    <!-- מודל פתיחת קבוצה עם כמה אנשים -->
     <div id="group-modal">
         <div class="modal-content">
-            <h4 style="margin:0 0 5px 0;">פתח קבוצת צ'אט</h4>
-            <input type="text" id="group-name-input" placeholder="שם הקבוצה החדשה..." style="padding:8px; border:1px solid #ddd; border-radius:4px; width:100%; box-sizing:border-box;">
-            <p style="margin:5px 0; font-size:12px; color:#666;">בחר משתמשים לקבוצה:</p>
-            <div id="group-users-checkboxes" style="max-height:150px; overflow-y:auto; border:1px solid #eee; padding:5px; border-radius:4px; display:flex; flex-direction:column; gap:4px;"></div>
+            <h4 style="margin:0 0 5px 0;">פתיחת קבוצה עם כמה אנשים</h4>
+            <input type="text" id="group-name-input" placeholder="הכנס שם קבוצה..." style="padding:8px; border:1px solid #ddd; border-radius:4px; width:100%; box-sizing:border-box;">
+            <p style="margin:5px 0; font-size:12px; color:#666;">בחר משתתפים:</p>
+            <div id="group-users-checkboxes" style="max-height:140px; overflow-y:auto; border:1px solid #eee; padding:5px; border-radius:4px; display:flex; flex-direction:column; gap:4px;"></div>
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
                 <button onclick="closeGroupModal()" style="background:#ccc; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">ביטול</button>
-                <button onclick="confirmCreateGroup()" style="background:#0084ff; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">צור קבוצה</button>
+                <button onclick="confirmCreateGroup()" style="background:#0084ff; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">אישור</button>
             </div>
         </div>
     </div>
@@ -527,6 +544,7 @@
         const sidebarContent = document.getElementById('sidebar-content');
         const sidebarTitle = document.getElementById('sidebar-title');
         const chatTitle = document.getElementById('chat-title');
+        const menuGlobalBadge = document.getElementById('menu-global-badge');
         
         const replyPreviewContainer = document.getElementById('reply-preview-container');
         const replyPreviewContent = document.getElementById('reply-preview-content');
@@ -540,7 +558,7 @@
         let unreadScrolledCount = 0;
         let isUserScrolledUp = false;
         let currentReplyingTo = null;
-        let unreadRoomsMap = {}; // מעקב אחר חדרים שיש בהם הודעות חדשות
+        let unreadRoomsMap = {}; // חדרים שיש בהם הודעות שלא נקראו
 
         if (currentNickname) {
             loginScreen.style.display = 'none';
@@ -654,13 +672,12 @@
             socket.emit('create-private-room', { roomName: roomName.trim(), targetNickname: targetUser });
         }
 
-        // פתיחת מודל קבוצה מכמה אנשים
         function openGroupModal() {
             const container = document.getElementById('group-users-checkboxes');
             container.innerHTML = '';
             globalUsers.forEach(u => {
                 if (u.nickname !== currentNickname) {
-                    const label = document.label || document.createElement('label');
+                    const label = document.createElement('label');
                     label.style.display = 'flex';
                     label.style.alignItems = 'center';
                     label.style.gap = '6px';
@@ -679,7 +696,7 @@
 
         function confirmCreateGroup() {
             const groupName = document.getElementById('group-name-input').value.trim();
-            if (!groupName) { alert('אנא הכנס שם לקבוצה'); return; }
+            if (!groupName) { alert('אנא הכנס שם קבוצה'); return; }
             
             const checkboxes = document.querySelectorAll('.group-user-chk:checked');
             let selectedMembers = [];
@@ -692,26 +709,38 @@
 
             socket.emit('create-group-room', { roomName: groupName, selectedMembers: selectedMembers });
             closeGroupModal();
-            document.getElementById('group-name-input.value = ''');
+            document.getElementById('group-name-input').value = '';
         }
 
         socket.on('room-created', (roomId) => {
             let roomObj = globalRooms[roomId];
-            switchToRoom(roomId, roomObj ? roomObj.name : 'צ\'אט קבוצתי');
+            switchToRoom(roomId, roomObj ? roomObj.name : 'צ\'אט אישי');
         });
 
-        // התראה על הודעה חדשה בחדר
+        // קבלת התראה על הודעה חדשה
         socket.on('room-notification', (data) => {
             if (currentRoomId !== data.roomId) {
                 unreadRoomsMap[data.roomId] = true;
-                // עדכון התצוגה בתפריט
+                updateGlobalBadge();
                 if (typeof updateSidebarUI === 'function') updateSidebarUI();
             }
         });
 
+        function updateGlobalBadge() {
+            let totalUnread = Object.values(unreadRoomsMap).filter(val => val === true).length;
+            if (totalUnread > 0) {
+                menuGlobalBadge.innerText = totalUnread;
+                menuGlobalBadge.style.display = 'inline-block';
+            } else {
+                menuGlobalBadge.style.display = 'none';
+            }
+        }
+
         function switchToRoom(roomId, roomTitle) {
             currentRoomId = roomId;
-            unreadRoomsMap[roomId] = false; // איפוס ההתראה כשנכנסים לחדר
+            unreadRoomsMap[roomId] = false; // איפוס ההתראה לחדר זה
+            updateGlobalBadge();
+
             let finalTitle = roomTitle;
             if ((!finalTitle || finalTitle === 'undefined') && globalRooms[roomId]) {
                 finalTitle = globalRooms[roomId].name;
@@ -933,12 +962,12 @@
                 sidebarContent.appendChild(backBtn);
             }
 
-            // כפתור פתיחת קבוצה עם כמה אנשים
+            // מלבן פתיחת קבוצה עם כמה אנשים
             const groupBtn = document.createElement('button');
             groupBtn.className = 'menu-action-btn';
             groupBtn.style.backgroundColor = '#4caf50';
             groupBtn.style.marginTop = '4px';
-            groupBtn.innerText = '👥 פתח צ\'אט קבוצתי עם כמה אנשים';
+            groupBtn.innerText = '👥 פתיחת קבוצה עם כמה אנשים';
             groupBtn.onclick = openGroupModal;
             sidebarContent.appendChild(groupBtn);
 
