@@ -11,12 +11,12 @@
             margin: 0;
             padding: 0;
             height: 100%;
-            /* הסרנו את ה-overflow hidden כדי לאפשר רענון וגלילה טבעית בדפדפן ובמובייל */
+            overflow: hidden; /* מונע גלילה מיותרת של כל המסך ברמת הדפדפן */
         }
         .container {
             width: 100%;
             max-width: 600px;
-            height: 100vh; /* מותאם לגובה המסך המלא */
+            height: 100%;
             background: white;
             display: flex;
             flex-direction: column;
@@ -312,6 +312,7 @@
             cursor: pointer;
         }
 
+        /* תיקון קריטי לתפריט הצד: גובה מלא של קונטיינר הצד וגלילה פנימית בלבד */
         #sidebar {
             position: absolute;
             top: 0;
@@ -339,7 +340,7 @@
             flex-shrink: 0;
         }
         #sidebar-content {
-            overflow-y: auto;
+            overflow-y: auto; /* הכל גולל אך ורק בתוך אזור זה בלי לזוז למסך הראשי */
             flex: 1;
             display: flex;
             flex-direction: column;
