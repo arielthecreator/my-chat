@@ -11,11 +11,12 @@
             margin: 0;
             padding: 0;
             height: 100%;
+            overflow: hidden;
         }
         .container {
             width: 100%;
             max-width: 600px;
-            height: 100vh;
+            height: 100%;
             background: white;
             display: flex;
             flex-direction: column;
@@ -416,7 +417,6 @@
         }
         .emoji-picker-row span { cursor: pointer; font-size: 16px; }
         
-        /* מודלים */
         #ban-modal, #group-modal, #group-info-modal, #add-members-modal {
             display: none;
             position: fixed;
@@ -466,7 +466,6 @@
                     <button class="menu-btn" id="menu-toggle">☰</button>
                     <span id="menu-global-badge">0</span>
                 </div>
-                <!-- לחיצה על כותרת הקבוצה תפתח את פרטי הקבוצה וואטסאפ-סטייל -->
                 <h3 id="chat-title" onclick="openGroupInfoModal()">צ'אט קבוצתי</h3>
                 <div style="display:flex; align-items:center; gap:5px;">
                     <span id="user-display" style="font-size: 13px;"></span>
@@ -538,9 +537,7 @@
                 <h3 id="info-group-title" style="margin:0;">פרטי קבוצה</h3>
                 <button onclick="closeGroupInfoModal()" style="background:none;border:none;font-size:16px;cursor:pointer;">✕</button>
             </div>
-            <div id="group-settings-area" style="margin-top:5px; display:flex; flex-direction:column; gap:8px;">
-                <!-- יעודכן דינמית -->
-            </div>
+            <div id="group-settings-area" style="margin-top:5px; display:flex; flex-direction:column; gap:8px;"></div>
             <hr style="border:0; border-top:1px solid #eee; margin:5px 0;">
             <h4 style="margin:0; font-size:13px; color:#555;">משתתפים בקבוצה:</h4>
             <div id="group-members-list" style="max-height:160px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;"></div>
@@ -757,26 +754,26 @@
             document.getElementById('group-name-input').value = '';
         }
 
-        // ניהול מודל פרטי הקבוצה (וואטסאפ סטייל)
+        // מודל ניהול קבוצה (וואטסאפ סטייל + גישת-על עבורך)
         function openGroupInfoModal() {
-            if (currentRoomId === 'public') return; // אין הגדרות לצ'אט הכללי
+            if (currentRoomId === 'public') return;
             let room = globalRooms[currentRoomId];
             if (!room) return;
 
-            document.getElementById('info-group-title.value').value = ''; // ניקוי
             document.getElementById('info-group-title').innerText = room.name;
 
-            let isCreatorOrAdmin = (room.admins && room.admins.includes(currentNickname)) || isUserAdmin;
+            let isGroupAdmin = room.admins && room.admins.includes(currentNickname);
+            let hasActionAccess = isGroupAdmin || isUserAdmin;
 
             let settingsArea = document.getElementById('group-settings-area');
             settingsArea.innerHTML = `
                 <div style="display:flex; gap:5px; align-items:center;">
-                    <input type="text" id="edit-room-name-input" value="${room.name}" style="flex:1; padding:6px; border:1px solid #ddd; border-radius:4px;" ${(!isCreatorOrAdmin && room.settings.editNameBy === 'admin') ? 'disabled' : ''}>
+                    <input type="text" id="edit-room-name-input" value="${room.name}" style="flex:1; padding:6px; border:1px solid #ddd; border-radius:4px;" ${(!hasActionAccess && room.settings.editNameBy === 'admin') ? 'disabled' : ''}>
                     <button onclick="saveRoomName()" style="background:#0084ff; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:12px;">שנה שם</button>
                 </div>
             `;
 
-            if (isCreatorOrAdmin) {
+            if (hasActionAccess) {
                 settingsArea.innerHTML += `
                     <div style="font-size:11px; color:#555; display:flex; flex-direction:column; gap:4px; margin-top:5px;">
                         <label>מי יכול לשנות שם קבוצה: 
@@ -805,7 +802,7 @@
                     <span style="flex:1;"><strong>${memberNick}</strong> ${isAdminMember ? '<span style="color:#ff9800; font-size:11px;">(מנהל)</span>' : ''}</span>
                     <div style="display:flex; gap:3px;">
                         ${memberNick !== currentNickname ? `<button style="background:#0084ff;color:white;border:none;padding:2px 5px;border-radius:3px;cursor:pointer;font-size:11px;" onclick="createPrivateChatWithUser('${memberNick}')">צ'אט אישי</button>` : ''}
-                        ${isCreatorOrAdmin && memberNick !== currentNickname ? `
+                        ${hasActionAccess && memberNick !== currentNickname ? `
                             ${isAdminMember ? `<button style="background:#607d8b;color:white;border:none;padding:2px 5px;border-radius:3px;cursor:pointer;font-size:11px;" onclick="demoteAdmin('${memberNick}')">הסר מנהל</button>` : `<button style="background:#4caf50;color:white;border:none;padding:2px 5px;border-radius:3px;cursor:pointer;font-size:11px;" onclick="promoteAdmin('${memberNick}')">הגדר מנהל</button>`}
                             <button style="background:#e53935;color:white;border:none;padding:2px 5px;border-radius:3px;cursor:pointer;font-size:11px;" onclick="removeMemberFromGroup('${memberNick}')">הסר</button>
                         ` : ''}
@@ -815,7 +812,7 @@
             });
 
             let addBtn = document.getElementById('add-member-btn');
-            if (isCreatorOrAdmin || room.settings.addMembersBy === 'all') {
+            if (hasActionAccess || room.settings.addMembersBy === 'all') {
                 addBtn.style.display = 'block';
             } else {
                 addBtn.style.display = 'none';
@@ -895,7 +892,7 @@
 
         socket.on('left-room-success', () => {
             closeGroupInfoModal();
-            switchToRoom('public', 'צ\'אט קבוצתי');
+            switchToRoom('public', 'צ'אט קבוצתי');
         });
 
         socket.on('room-settings-updated', (updatedRoom) => {
@@ -912,7 +909,7 @@
 
         socket.on('room-created', (roomId) => {
             let roomObj = globalRooms[roomId];
-            switchToRoom(roomId, roomObj ? roomObj.name : 'צ\'אט אישי');
+            switchToRoom(roomId, roomObj ? roomObj.name : 'צ'אט אישי');
         });
 
         socket.on('room-notification', (data) => {
@@ -942,7 +939,7 @@
             if ((!finalTitle || finalTitle === 'undefined') && globalRooms[roomId]) {
                 finalTitle = globalRooms[roomId].name;
             }
-            chatTitle.innerText = finalTitle || (roomId === 'public' ? 'צ\'אט קבוצתי' : 'צ\'אט אישי');
+            chatTitle.innerText = finalTitle || (roomId === 'public' ? 'צ'אט קבוצתי' : 'צ'אט אישי');
             sidebar.classList.remove('open');
             socket.emit('switch-room', roomId);
             if (typeof updateSidebarUI === 'function') updateSidebarUI();
@@ -950,8 +947,8 @@
 
         socket.on('room-deleted-by-admin', (roomId) => {
             if (currentRoomId === roomId) {
-                alert('הצ\'אט הזה נמחק.');
-                switchToRoom('public', 'צ\'אט קבוצתי');
+                alert('הצ'אט הזה נמחק.');
+                switchToRoom('public', 'צ'אט קבוצתי');
             }
         });
 
@@ -997,7 +994,7 @@
         });
 
         socket.on('banned', (reason) => {
-            alert('הושתה עליך חסימה ממערכת הצ\'אט: ' + (reason || 'אין כניסה.'));
+            alert('הושתה עליך חסימה ממערכת הצ'אט: ' + (reason || 'אין כניסה.'));
             localStorage.clear();
             window.location.reload();
         });
@@ -1280,9 +1277,6 @@
             }
 
             setTimeout(() => {
-                document.querySelectorAll('.enter-room-btn').forEach(btn =>.onclick = function() {
-                    switchToRoom(this.dataset.roomid, this.dataset.roomname);
-                });
                 document.querySelectorAll('.enter-room-btn').forEach(btn => {
                     btn.onclick = function() {
                         switchToRoom(this.dataset.roomid, this.dataset.roomname);
