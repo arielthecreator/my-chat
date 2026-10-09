@@ -530,7 +530,7 @@
         </div>
     </div>
 
-    <!-- מודל פרטי וניהול קבוצה (וואטסאפ סטייל) -->
+    <!-- מודל פרטי וניהול קבוצה -->
     <div id="group-info-modal">
         <div class="modal-content">
             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -610,10 +610,13 @@
             if (!nick) { alert('אנא הכנס כינוי תקין'); return; }
             currentNickname = nick;
             localStorage.setItem('chat_nickname', currentNickname);
-            socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
+            
+            // מעבר מיידי של המסכים ללא תלות בתגובת השרת
             loginScreen.style.display = 'none';
             chatScreen.style.display = 'flex';
             userDisplay.innerText = currentNickname;
+
+            socket.emit('join', { nickname: currentNickname, isAdmin: isUserAdmin });
         });
 
         function editNickname() {
@@ -754,7 +757,6 @@
             document.getElementById('group-name-input').value = '';
         }
 
-        // מודל ניהול קבוצה (וואטסאפ סטייל + גישת-על עבורך)
         function openGroupInfoModal() {
             if (currentRoomId === 'public') return;
             let room = globalRooms[currentRoomId];
@@ -892,7 +894,7 @@
 
         socket.on('left-room-success', () => {
             closeGroupInfoModal();
-            switchToRoom('public', 'צ'אט קבוצתי');
+            switchToRoom('public', 'צ\'אט קבוצתי');
         });
 
         socket.on('room-settings-updated', (updatedRoom) => {
@@ -909,7 +911,7 @@
 
         socket.on('room-created', (roomId) => {
             let roomObj = globalRooms[roomId];
-            switchToRoom(roomId, roomObj ? roomObj.name : 'צ'אט אישי');
+            switchToRoom(roomId, roomObj ? roomObj.name : 'צ\'אט אישי');
         });
 
         socket.on('room-notification', (data) => {
@@ -939,7 +941,7 @@
             if ((!finalTitle || finalTitle === 'undefined') && globalRooms[roomId]) {
                 finalTitle = globalRooms[roomId].name;
             }
-            chatTitle.innerText = finalTitle || (roomId === 'public' ? 'צ'אט קבוצתי' : 'צ'אט אישי');
+            chatTitle.innerText = finalTitle || (roomId === 'public' ? 'צ\'אט קבוצתי' : 'צ\'אט אישי');
             sidebar.classList.remove('open');
             socket.emit('switch-room', roomId);
             if (typeof updateSidebarUI === 'function') updateSidebarUI();
@@ -947,8 +949,8 @@
 
         socket.on('room-deleted-by-admin', (roomId) => {
             if (currentRoomId === roomId) {
-                alert('הצ'אט הזה נמחק.');
-                switchToRoom('public', 'צ'אט קבוצתי');
+                alert('הצ\'אט הזה נמחק.');
+                switchToRoom('public', 'צ\'אט קבוצתי');
             }
         });
 
@@ -994,7 +996,7 @@
         });
 
         socket.on('banned', (reason) => {
-            alert('הושתה עליך חסימה ממערכת הצ'אט: ' + (reason || 'אין כניסה.'));
+            alert('הושתה עליך חסימה ממערכת הצ\'אט: ' + (reason || 'אין כניסה.'));
             localStorage.clear();
             window.location.reload();
         });
