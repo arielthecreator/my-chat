@@ -136,7 +136,9 @@ io.on('connection', (socket) => {
         let roomId = 'room_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
         privateRooms[roomId] = {
             name: roomName,
-            members: [creatorNick, targetNickname]
+            members: [creatorNick, targetNickname],
+            admins: [creatorNick],
+            settings: { editNameBy: 'all', addMembersBy: 'all' }
         };
         messages[roomId] = [];
 
@@ -157,18 +159,23 @@ io.on('connection', (socket) => {
         updateAllData();
     });
 
-    // פתיחת קבוצה מרובת משתמשים
+    // פתיחת קבוצה מרובת משתמשים עם הגדרות וניהול וואטסאפ
     socket.on('create-group-room', (data) => {
         const { roomName, selectedMembers } = data;
         const creatorNick = users[socket.id] ? users[socket.id].nickname : 'אורח';
         
         let members = [creatorNick, ...selectedMembers];
-        members = [...new Set(members)]; // מניעת כפילויות
+        members = [...new Set(members)];
 
         let roomId = 'group_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
         privateRooms[roomId] = {
             name: roomName,
-            members: members
+            members: members,
+            admins: [creatorNick], // יוצר הקבוצה הוא מנהל ראשוני
+            settings: {
+                editNameBy: 'all',     // ברירת מחדל: כולם יכולים לשנות שם
+                addMembersBy: 'all'    // ברירת מחדל: כולם יכולים להוסיף חברים
+            }
         };
         messages[roomId] = [];
 
@@ -184,6 +191,118 @@ io.on('connection', (socket) => {
 
         socket.emit('room-created', roomId);
         updateAllData();
+    });
+
+    // עדכון הגדרות קבוצה (שם, מנהלים, הרשאות)
+    socket.on('update-group-settings', (data) => {
+        const { roomId, newName, settings } = data;
+        const user = users[socket.id];
+        if (!user || !privateRooms[roomId]) return;
+
+        let room = privateRooms[roomId];
+        let isCreatorOrAdmin = room.admins && room.admins.includes(user.nickname);
+
+        if (newName && newName.trim() !== '') {
+            if (room.settings.editNameBy === 'admin' && !isCreatorOrAdmin && !user.isAdmin) {
+                socket.emit('error-msg', 'רק מנהל קבוצה יכול לשנות את שם הקבוצה.');
+                return;
+            }
+            room.name = newName.trim();
+        }
+
+        if (settings) {
+            if (!isCreatorOrAdmin && !user.isAdmin) {
+                socket.emit('error-msg', 'רק מנהל קבוצה יכול לשנות הגדרות.');
+                return;
+            }
+            room.settings.editNameBy = settings.editNameBy || room.settings.editNameBy;
+            room.settings.addMembersBy = settings.addMembersBy || room.settings.addMembersBy;
+        }
+
+        updateAllData();
+        io.to(roomId).emit('room-settings-updated', room);
+    });
+
+    // הוספת חברים לקבוצה קיימת
+    socket.on('add-members-to-group', (data) => {
+        const { roomId, newMembers } = data;
+        const user = users[socket.id];
+        if (!user || !privateRooms[roomId]) return;
+
+        let room = privateRooms[roomId];
+        let isCreatorOrAdmin = room.admins && room.admins.includes(user.nickname);
+
+        if (room.settings.addMembersBy === 'admin' && !isCreatorOrAdmin && !user.isAdmin) {
+            socket.emit('error-msg', 'רק מנהל קבוצה יכול להוסיף חברים חדשים.');
+            return;
+        }
+
+        newMembers.forEach(nick => {
+            if (!room.members.includes(nick)) {
+                room.members.push(nick);
+                // צרוף לסוקט אם מחובר
+                for (let id in users) {
+                    if (users[id].nickname === nick) {
+                        let s = io.sockets.sockets.get(id);
+                        if (s) s.join(roomId);
+                    }
+                }
+            }
+        });
+
+        updateAllData();
+        io.to(roomId).emit('room-settings-updated', room);
+    });
+
+    // הסרת חבר מהקבוצה או מינוי/הסרת מנהל
+    socket.on('manage-group-member', (data) => {
+        const { roomId, targetNickname, action } = data; // actions: 'remove', 'promote', 'demote'
+        const user = users[socket.id];
+        if (!user || !privateRooms[roomId]) return;
+
+        let room = privateRooms[roomId];
+        let isCreatorOrAdmin = room.admins && room.admins.includes(user.nickname);
+
+        if (!isCreatorOrAdmin && !user.isAdmin) {
+            socket.emit('error-msg', 'פעולת ניהול מותרת למנהלים בלבד.');
+            return;
+        }
+
+        if (action === 'remove') {
+            room.members = room.members.filter(m => m !== targetNickname);
+            room.admins = room.admins.filter(a => a !== targetNickname);
+            // הוצאה מהסוקט
+            for (let id in users) {
+                if (users[id].nickname === targetNickname) {
+                    let s = io.sockets.sockets.get(id);
+                    if (s) s.leave(roomId);
+                }
+            }
+        } else if (action === 'promote') {
+            if (!room.admins.includes(targetNickname)) {
+                room.admins.push(targetNickname);
+            }
+        } else if (action === 'demote') {
+            room.admins = room.admins.filter(a => a !== targetNickname);
+        }
+
+        updateAllData();
+        io.to(roomId).emit('room-settings-updated', room);
+    });
+
+    // עזיבת קבוצה ע"י משתמש
+    socket.on('leave-group', (roomId) => {
+        const user = users[socket.id];
+        if (!user || !privateRooms[roomId]) return;
+
+        let room = privateRooms[roomId];
+        room.members = room.members.filter(m => m !== user.nickname);
+        room.admins = room.admins.filter(a => a !== user.nickname);
+        socket.leave(roomId);
+
+        updateAllData();
+        io.to(roomId).emit('room-settings-updated', room);
+        socket.emit('left-room-success');
     });
 
     socket.on('chat-message', (data) => {
@@ -214,7 +333,6 @@ io.on('connection', (socket) => {
 
         io.to(currentRoom).emit('new-message', newMessage);
 
-        // שליחת התראה לכל חברי החדר שלא נמצאים בו כרגע
         if (currentRoom !== 'public' && privateRooms[currentRoom]) {
             let roomMembers = privateRooms[currentRoom].members;
             roomMembers.forEach(memberNick => {
