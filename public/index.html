@@ -395,7 +395,7 @@
         }
         .emoji-picker-row span { cursor: pointer; font-size: 16px; }
         
-        #ban-modal {
+        #ban-modal, #group-modal {
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -404,7 +404,7 @@
             justify-content: center;
             align-items: center;
         }
-        .ban-modal-content {
+        .modal-content {
             background: white;
             padding: 20px;
             border-radius: 8px;
@@ -414,6 +414,17 @@
             flex-direction: column;
             gap: 10px;
         }
+        .notification-badge {
+            background: #e53935;
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-right: 5px;
+            font-weight: bold;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
@@ -465,8 +476,9 @@
         </div>
     </div>
 
+    <!-- מודל חסימה -->
     <div id="ban-modal">
-        <div class="ban-modal-content">
+        <div class="modal-content">
             <h4 style="margin:0 0 10px 0;">בחר משך חסימה</h4>
             <select id="ban-duration-select">
                 <option value="1h">שעה אחת</option>
@@ -475,6 +487,20 @@
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
                 <button onclick="closeBanModal()" style="background:#ccc; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">ביטול</button>
                 <button onclick="confirmBanUser()" style="background:#e53935; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">חסום</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- מודל פתיחת קבוצת כמה אנשים -->
+    <div id="group-modal">
+        <div class="modal-content">
+            <h4 style="margin:0 0 5px 0;">פתח קבוצת צ'אט</h4>
+            <input type="text" id="group-name-input" placeholder="שם הקבוצה החדשה..." style="padding:8px; border:1px solid #ddd; border-radius:4px; width:100%; box-sizing:border-box;">
+            <p style="margin:5px 0; font-size:12px; color:#666;">בחר משתמשים לקבוצה:</p>
+            <div id="group-users-checkboxes" style="max-height:150px; overflow-y:auto; border:1px solid #eee; padding:5px; border-radius:4px; display:flex; flex-direction:column; gap:4px;"></div>
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
+                <button onclick="closeGroupModal()" style="background:#ccc; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">ביטול</button>
+                <button onclick="confirmCreateGroup()" style="background:#0084ff; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">צור קבוצה</button>
             </div>
         </div>
     </div>
@@ -514,6 +540,7 @@
         let unreadScrolledCount = 0;
         let isUserScrolledUp = false;
         let currentReplyingTo = null;
+        let unreadRoomsMap = {}; // מעקב אחר חדרים שיש בהם הודעות חדשות
 
         if (currentNickname) {
             loginScreen.style.display = 'none';
@@ -627,13 +654,64 @@
             socket.emit('create-private-room', { roomName: roomName.trim(), targetNickname: targetUser });
         }
 
+        // פתיחת מודל קבוצה מכמה אנשים
+        function openGroupModal() {
+            const container = document.getElementById('group-users-checkboxes');
+            container.innerHTML = '';
+            globalUsers.forEach(u => {
+                if (u.nickname !== currentNickname) {
+                    const label = document.label || document.createElement('label');
+                    label.style.display = 'flex';
+                    label.style.alignItems = 'center';
+                    label.style.gap = '6px';
+                    label.style.fontSize = '13px';
+                    label.style.cursor = 'pointer';
+                    label.innerHTML = `<input type="checkbox" value="${u.nickname}" class="group-user-chk"> ${u.nickname}`;
+                    container.appendChild(label);
+                }
+            });
+            document.getElementById('group-modal').style.display = 'flex';
+        }
+
+        function closeGroupModal() {
+            document.getElementById('group-modal').style.display = 'none';
+        }
+
+        function confirmCreateGroup() {
+            const groupName = document.getElementById('group-name-input').value.trim();
+            if (!groupName) { alert('אנא הכנס שם לקבוצה'); return; }
+            
+            const checkboxes = document.querySelectorAll('.group-user-chk:checked');
+            let selectedMembers = [];
+            checkboxes.forEach(chk => selectedMembers.push(chk.value));
+
+            if (selectedMembers.length === 0) {
+                alert('אנא בחר לפחות משתמש אחד לקבוצה');
+                return;
+            }
+
+            socket.emit('create-group-room', { roomName: groupName, selectedMembers: selectedMembers });
+            closeGroupModal();
+            document.getElementById('group-name-input.value = ''');
+        }
+
         socket.on('room-created', (roomId) => {
             let roomObj = globalRooms[roomId];
-            switchToRoom(roomId, roomObj ? roomObj.name : 'צ\'אט אישי');
+            switchToRoom(roomId, roomObj ? roomObj.name : 'צ\'אט קבוצתי');
+        });
+
+        // התראה על הודעה חדשה בחדר
+        socket.on('room-notification', (data) => {
+            if (currentRoomId !== data.roomId) {
+                unreadRoomsMap[data.roomId] = true;
+                // עדכון התצוגה בתפריט
+                if (typeof updateSidebarUI === 'function') updateSidebarUI();
+            }
         });
 
         function switchToRoom(roomId, roomTitle) {
             currentRoomId = roomId;
+            unreadRoomsMap[roomId] = false; // איפוס ההתראה כשנכנסים לחדר
             let finalTitle = roomTitle;
             if ((!finalTitle || finalTitle === 'undefined') && globalRooms[roomId]) {
                 finalTitle = globalRooms[roomId].name;
@@ -641,6 +719,7 @@
             chatTitle.innerText = finalTitle || (roomId === 'public' ? 'צ\'אט קבוצתי' : 'צ\'אט אישי');
             sidebar.classList.remove('open');
             socket.emit('switch-room', roomId);
+            if (typeof updateSidebarUI === 'function') updateSidebarUI();
         }
 
         socket.on('room-deleted-by-admin', (roomId) => {
@@ -839,7 +918,10 @@
             });
             globalUsers = Object.values(uniqueUsersMap);
             globalRooms = data.privateRooms || {};
-            
+            updateSidebarUI();
+        });
+
+        function updateSidebarUI() {
             sidebarContent.innerHTML = '';
 
             if (currentRoomId !== 'public') {
@@ -851,12 +933,22 @@
                 sidebarContent.appendChild(backBtn);
             }
 
+            // כפתור פתיחת קבוצה עם כמה אנשים
+            const groupBtn = document.createElement('button');
+            groupBtn.className = 'menu-action-btn';
+            groupBtn.style.backgroundColor = '#4caf50';
+            groupBtn.style.marginTop = '4px';
+            groupBtn.innerText = '👥 פתח צ\'אט קבוצתי עם כמה אנשים';
+            groupBtn.onclick = openGroupModal;
+            sidebarContent.appendChild(groupBtn);
+
             if (isUserAdmin) {
                 sidebarTitle.innerText = "פאנל ניהול סודי 🛡️";
 
                 const clearChatBtn = document.createElement('button');
                 clearChatBtn.className = 'menu-action-btn';
                 clearChatBtn.style.backgroundColor = '#e53935';
+                clearChatBtn.style.marginTop = '4px';
                 clearChatBtn.innerText = '🗑️ נקה היסטוריית צ\'אט נוכחי';
                 clearChatBtn.onclick = () => {
                     if (confirm('האם לנקות את ההודעות בצ\'אט הנוכחי?')) {
@@ -891,11 +983,12 @@
 
                 for (let rId in globalRooms) {
                     let r = globalRooms[rId];
+                    let notifyBadge = unreadRoomsMap[rId] ? `<span class="notification-badge">חדש!</span>` : '';
                     const roomItem = document.createElement('div');
                     roomItem.className = 'room-item';
                     roomItem.innerHTML = `
                         <div style="flex:1;">
-                            <strong>${r.name}</strong><br>
+                            <strong>${r.name}</strong> ${notifyBadge}<br>
                             <small style="color:#666;">משתתפים: ${(r.members || []).join(', ')}</small>
                         </div>
                         <div style="display:flex; gap:3px;">
@@ -910,7 +1003,7 @@
                 sidebarTitle.innerText = "משתמשים מחוברים";
                 
                 let usersHeaderTitle = document.createElement('div');
-                usersHeaderTitle.innerHTML = '<strong style="color:#2e7d32; font-size:13px;">👥 רשימת משתמשים:</strong>';
+                usersHeaderTitle.innerHTML = '<br><strong style="color:#2e7d32; font-size:13px;">👥 רשימת משתמשים:</strong>';
                 sidebarContent.appendChild(usersHeaderTitle);
 
                 globalUsers.forEach(user => {
@@ -935,11 +1028,12 @@
                     let r = globalRooms[rId];
                     if (r.members && r.members.includes(currentNickname)) {
                         hasMyRooms = true;
+                        let notifyBadge = unreadRoomsMap[rId] ? `<span class="notification-badge">חדש!</span>` : '';
                         const roomItem = document.createElement('div');
                         roomItem.className = 'room-item';
                         roomItem.innerHTML = `
                             <div style="flex:1;">
-                                <strong>${r.name}</strong><br>
+                                <strong>${r.name}</strong> ${notifyBadge}<br>
                                 <small style="color:#666;">משתתפים: ${(r.members || []).join(', ')}</small>
                             </div>
                             <div>
@@ -967,7 +1061,7 @@
                     };
                 });
             }, 50);
-        });
+        }
 
         function deletePrivateRoom(roomId) {
             if (confirm('האם אתה בטוח שברצונך למחוק את החדר הזה לצמיתות?')) {
