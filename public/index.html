@@ -11,12 +11,11 @@
             margin: 0;
             padding: 0;
             height: 100%;
-            overflow: hidden; /* מונע גלילה מיותרת של כל המסך ברמת הדפדפן */
         }
         .container {
             width: 100%;
             max-width: 600px;
-            height: 100%;
+            height: 100vh;
             background: white;
             display: flex;
             flex-direction: column;
@@ -103,6 +102,7 @@
             cursor: pointer;
             user-select: none;
             font-size: 16px;
+            text-decoration: underline;
         }
         .chat-messages-wrapper {
             flex: 1;
@@ -312,7 +312,6 @@
             cursor: pointer;
         }
 
-        /* תיקון קריטי לתפריט הצד: גובה מלא של קונטיינר הצד וגלילה פנימית בלבד */
         #sidebar {
             position: absolute;
             top: 0;
@@ -340,7 +339,7 @@
             flex-shrink: 0;
         }
         #sidebar-content {
-            overflow-y: auto; /* הכל גולל אך ורק בתוך אזור זה בלי לזוז למסך הראשי */
+            overflow-y: auto;
             flex: 1;
             display: flex;
             flex-direction: column;
@@ -417,7 +416,8 @@
         }
         .emoji-picker-row span { cursor: pointer; font-size: 16px; }
         
-        #ban-modal, #group-modal {
+        /* מודלים */
+        #ban-modal, #group-modal, #group-info-modal, #add-members-modal {
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -431,10 +431,12 @@
             padding: 20px;
             border-radius: 8px;
             width: 90%;
-            max-width: 320px;
+            max-width: 340px;
             display: flex;
             flex-direction: column;
             gap: 10px;
+            max-height: 80vh;
+            overflow-y: auto;
         }
         .notification-badge {
             background: #e53935;
@@ -464,7 +466,8 @@
                     <button class="menu-btn" id="menu-toggle">☰</button>
                     <span id="menu-global-badge">0</span>
                 </div>
-                <h3 id="chat-title">צ'אט קבוצתי</h3>
+                <!-- לחיצה על כותרת הקבוצה תפתח את פרטי הקבוצה וואטסאפ-סטייל -->
+                <h3 id="chat-title" onclick="openGroupInfoModal()">צ'אט קבוצתי</h3>
                 <div style="display:flex; align-items:center; gap:5px;">
                     <span id="user-display" style="font-size: 13px;"></span>
                     <button onclick="editNickname()" title="שנה כינוי" style="background:none; border:none; color:white; cursor:pointer; font-size:14px;">✏️</button>
@@ -524,6 +527,38 @@
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
                 <button onclick="closeGroupModal()" style="background:#ccc; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">ביטול</button>
                 <button onclick="confirmCreateGroup()" style="background:#0084ff; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">אישור</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- מודל פרטי וניהול קבוצה (וואטסאפ סטייל) -->
+    <div id="group-info-modal">
+        <div class="modal-content">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 id="info-group-title" style="margin:0;">פרטי קבוצה</h3>
+                <button onclick="closeGroupInfoModal()" style="background:none;border:none;font-size:16px;cursor:pointer;">✕</button>
+            </div>
+            <div id="group-settings-area" style="margin-top:5px; display:flex; flex-direction:column; gap:8px;">
+                <!-- יעודכן דינמית -->
+            </div>
+            <hr style="border:0; border-top:1px solid #eee; margin:5px 0;">
+            <h4 style="margin:0; font-size:13px; color:#555;">משתתפים בקבוצה:</h4>
+            <div id="group-members-list" style="max-height:160px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;"></div>
+            <div style="display:flex; gap:6px; margin-top:5px;">
+                <button id="add-member-btn" onclick="openAddMembersModal()" style="flex:1; background:#4caf50; color:white; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:12px; display:none;">➕ הוסף אנשים</button>
+                <button onclick="leaveCurrentGroup()" style="background:#e53935; color:white; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; font-size:12px;">🚪 עזוב קבוצה</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- מודל הוספת משתמשים לקבוצה קיימת -->
+    <div id="add-members-modal">
+        <div class="modal-content">
+            <h4 style="margin:0 0 5px 0;">הוסף משתתפים לקבוצה</h4>
+            <div id="add-members-checkboxes" style="max-height:150px; overflow-y:auto; border:1px solid #eee; padding:5px; border-radius:4px; display:flex; flex-direction:column; gap:4px;"></div>
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
+                <button onclick="closeAddMembersModal()" style="background:#ccc; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">ביטול</button>
+                <button onclick="confirmAddMembers()" style="background:#0084ff; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">הוסף</button>
             </div>
         </div>
     </div>
@@ -652,13 +687,17 @@
 
         let lastClickTime = 0;
         chatTitle.addEventListener('click', () => {
-            if (isUserAdmin) return;
-            let currentTime = new Date().getTime();
-            if (currentTime - lastClickTime < 400) {
-                let password = prompt('הכנס סיסמת מנהל:');
-                if (password !== null) socket.emit('verify-admin', password.trim());
+            if (currentRoomId === 'public') {
+                if (isUserAdmin) return;
+                let currentTime = new Date().getTime();
+                if (currentTime - lastClickTime < 400) {
+                    let password = prompt('הכנס סיסמת מנהל:');
+                    if (password !== null) socket.emit('verify-admin', password.trim());
+                }
+                lastClickTime = currentTime;
+            } else {
+                openGroupInfoModal();
             }
-            lastClickTime = currentTime;
         });
 
         socket.on('admin-success', (success) => {
@@ -717,6 +756,159 @@
             closeGroupModal();
             document.getElementById('group-name-input').value = '';
         }
+
+        // ניהול מודל פרטי הקבוצה (וואטסאפ סטייל)
+        function openGroupInfoModal() {
+            if (currentRoomId === 'public') return; // אין הגדרות לצ'אט הכללי
+            let room = globalRooms[currentRoomId];
+            if (!room) return;
+
+            document.getElementById('info-group-title.value').value = ''; // ניקוי
+            document.getElementById('info-group-title').innerText = room.name;
+
+            let isCreatorOrAdmin = (room.admins && room.admins.includes(currentNickname)) || isUserAdmin;
+
+            let settingsArea = document.getElementById('group-settings-area');
+            settingsArea.innerHTML = `
+                <div style="display:flex; gap:5px; align-items:center;">
+                    <input type="text" id="edit-room-name-input" value="${room.name}" style="flex:1; padding:6px; border:1px solid #ddd; border-radius:4px;" ${(!isCreatorOrAdmin && room.settings.editNameBy === 'admin') ? 'disabled' : ''}>
+                    <button onclick="saveRoomName()" style="background:#0084ff; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:12px;">שנה שם</button>
+                </div>
+            `;
+
+            if (isCreatorOrAdmin) {
+                settingsArea.innerHTML += `
+                    <div style="font-size:11px; color:#555; display:flex; flex-direction:column; gap:4px; margin-top:5px;">
+                        <label>מי יכול לשנות שם קבוצה: 
+                            <select id="setting-edit-name" onchange="saveGroupPermissions()" style="padding:2px;">
+                                <option value="all" ${room.settings.editNameBy === 'all' ? 'selected' : ''}>כולם</option>
+                                <option value="admin" ${room.settings.editNameBy === 'admin' ? 'selected' : ''}>מנהלים בלבד</option>
+                            </select>
+                        </label>
+                        <label>מי יכול להוסיף חברים: 
+                            <select id="setting-add-members" onchange="saveGroupPermissions()" style="padding:2px;">
+                                <option value="all" ${room.settings.addMembersBy === 'all' ? 'selected' : ''}>כולם</option>
+                                <option value="admin" ${room.settings.addMembersBy === 'admin' ? 'selected' : ''}>מנהלים בלבד</option>
+                            </select>
+                        </label>
+                    </div>
+                `;
+            }
+
+            let membersList = document.getElementById('group-members-list');
+            membersList.innerHTML = '';
+            (room.members || []).forEach(memberNick => {
+                let isAdminMember = room.admins && room.admins.includes(memberNick);
+                let item = document.createElement('div');
+                item.className = 'user-mgmt-item';
+                item.innerHTML = `
+                    <span style="flex:1;"><strong>${memberNick}</strong> ${isAdminMember ? '<span style="color:#ff9800; font-size:11px;">(מנהל)</span>' : ''}</span>
+                    <div style="display:flex; gap:3px;">
+                        ${memberNick !== currentNickname ? `<button style="background:#0084ff;color:white;border:none;padding:2px 5px;border-radius:3px;cursor:pointer;font-size:11px;" onclick="createPrivateChatWithUser('${memberNick}')">צ'אט אישי</button>` : ''}
+                        ${isCreatorOrAdmin && memberNick !== currentNickname ? `
+                            ${isAdminMember ? `<button style="background:#607d8b;color:white;border:none;padding:2px 5px;border-radius:3px;cursor:pointer;font-size:11px;" onclick="demoteAdmin('${memberNick}')">הסר מנהל</button>` : `<button style="background:#4caf50;color:white;border:none;padding:2px 5px;border-radius:3px;cursor:pointer;font-size:11px;" onclick="promoteAdmin('${memberNick}')">הגדר מנהל</button>`}
+                            <button style="background:#e53935;color:white;border:none;padding:2px 5px;border-radius:3px;cursor:pointer;font-size:11px;" onclick="removeMemberFromGroup('${memberNick}')">הסר</button>
+                        ` : ''}
+                    </div>
+                `;
+                membersList.appendChild(item);
+            });
+
+            let addBtn = document.getElementById('add-member-btn');
+            if (isCreatorOrAdmin || room.settings.addMembersBy === 'all') {
+                addBtn.style.display = 'block';
+            } else {
+                addBtn.style.display = 'none';
+            }
+
+            document.getElementById('group-info-modal').style.display = 'flex';
+        }
+
+        function closeGroupInfoModal() {
+            document.getElementById('group-info-modal').style.display = 'none';
+        }
+
+        function saveRoomName() {
+            let newName = document.getElementById('edit-room-name-input').value.trim();
+            if (!newName) return;
+            socket.emit('update-group-settings', { roomId: currentRoomId, newName: newName });
+        }
+
+        function saveGroupPermissions() {
+            let editNameBy = document.getElementById('setting-edit-name').value;
+            let addMembersBy = document.getElementById('setting-add-members').value;
+            socket.emit('update-group-settings', { roomId: currentRoomId, settings: { editNameBy, addMembersBy } });
+        }
+
+        function promoteAdmin(nick) {
+            socket.emit('manage-group-member', { roomId: currentRoomId, targetNickname: nick, action: 'promote' });
+        }
+        function demoteAdmin(nick) {
+            socket.emit('manage-group-member', { roomId: currentRoomId, targetNickname: nick, action: 'demote' });
+        }
+        function removeMemberFromGroup(nick) {
+            if (confirm(`להסיר את ${nick} מהקבוצה?`)) {
+                socket.emit('manage-group-member', { roomId: currentRoomId, targetNickname: nick, action: 'remove' });
+            }
+        }
+
+        function openAddMembersModal() {
+            let room = globalRooms[currentRoomId];
+            if (!room) return;
+            let container = document.getElementById('add-members-checkboxes');
+            container.innerHTML = '';
+
+            globalUsers.forEach(u => {
+                if (!room.members.includes(u.nickname)) {
+                    const label = document.createElement('label');
+                    label.style.display = 'flex';
+                    label.style.alignItems = 'center';
+                    label.style.gap = '6px';
+                    label.style.fontSize = '13px';
+                    label.style.cursor = 'pointer';
+                    label.innerHTML = `<input type="checkbox" value="${u.nickname}" class="add-user-chk"> ${u.nickname}`;
+                    container.appendChild(label);
+                }
+            });
+            document.getElementById('add-members-modal').style.display = 'flex';
+        }
+
+        function closeAddMembersModal() {
+            document.getElementById('add-members-modal').style.display = 'none';
+        }
+
+        function confirmAddMembers() {
+            const checkboxes = document.querySelectorAll('.add-user-chk:checked');
+            let newMembers = [];
+            checkboxes.forEach(chk => newMembers.push(chk.value));
+            if (newMembers.length === 0) return;
+
+            socket.emit('add-members-to-group', { roomId: currentRoomId, newMembers: newMembers });
+            closeAddMembersModal();
+        }
+
+        function leaveCurrentGroup() {
+            if (confirm('האם אתה בטוח שברצונך לעזוב את הקבוצה?')) {
+                socket.emit('leave-group', currentRoomId);
+            }
+        }
+
+        socket.on('left-room-success', () => {
+            closeGroupInfoModal();
+            switchToRoom('public', 'צ\'אט קבוצתי');
+        });
+
+        socket.on('room-settings-updated', (updatedRoom) => {
+            globalRooms[currentRoomId] = updatedRoom;
+            chatTitle.innerText = updatedRoom.name;
+            if (document.getElementById('group-info-modal').style.display === 'flex') {
+                openGroupInfoModal();
+            }
+        });
+
+        socket.on('error-msg', (msg) => {
+            alert(msg);
+        });
 
         socket.on('room-created', (roomId) => {
             let roomObj = globalRooms[roomId];
@@ -1088,6 +1280,9 @@
             }
 
             setTimeout(() => {
+                document.querySelectorAll('.enter-room-btn').forEach(btn =>.onclick = function() {
+                    switchToRoom(this.dataset.roomid, this.dataset.roomname);
+                });
                 document.querySelectorAll('.enter-room-btn').forEach(btn => {
                     btn.onclick = function() {
                         switchToRoom(this.dataset.roomid, this.dataset.roomname);
