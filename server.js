@@ -103,7 +103,7 @@ io.on('connection', (socket) => {
         socket.emit('load-messages', messages[roomId]);
     });
 
-    // פתיחת צ'אט פרטי (בין שני אנשים)
+    // צ'אט אישי (בין שניים)
     socket.on('create-private-room', (data) => {
         const { roomName, targetNickname } = data;
         const creatorNick = users[socket.id] ? users[socket.id].nickname : 'אורח';
@@ -138,4 +138,215 @@ io.on('connection', (socket) => {
             name: roomName,
             members: [creatorNick, targetNickname]
         };
+        messages[roomId] = [];
+
+        let targetSocketId = null;
+        for (let id in users) {
+            if (users[id].nickname === targetNickname) {
+                targetSocketId = id;
+                break;
+            }
+        }
+
+        socket.join(roomId);
+        if (targetSocketId && io.sockets.sockets.get(targetSocketId)) {
+            io.sockets.sockets.get(targetSocketId).join(roomId);
+        }
+
+        socket.emit('room-created', roomId);
+        updateAllData();
+    });
+
+    // פתיחת קבוצה מרובת משתמשים
+    socket.on('create-group-room', (data) => {
+        const { roomName, selectedMembers } = data;
+        const creatorNick = users[socket.id] ? users[socket.id].nickname : 'אורח';
         
+        let members = [creatorNick, ...selectedMembers];
+        members = [...new Set(members)]; // מניעת כפילויות
+
+        let roomId = 'group_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+        privateRooms[roomId] = {
+            name: roomName,
+            members: members
+        };
+        messages[roomId] = [];
+
+        socket.join(roomId);
+        members.forEach(nick => {
+            for (let id in users) {
+                if (users[id].nickname === nick) {
+                    let s = io.sockets.sockets.get(id);
+                    if (s) s.join(roomId);
+                }
+            }
+        });
+
+        socket.emit('room-created', roomId);
+        updateAllData();
+    });
+
+    socket.on('chat-message', (data) => {
+        let currentRoom = 'public';
+        for (let r of socket.rooms) {
+            if (r !== socket.id) { currentRoom = r; break; }
+        }
+
+        const user = users[socket.id];
+        const nickname = user ? user.nickname : data.nickname;
+
+        const newMessage = {
+            id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+            senderSocketId: socket.id,
+            nickname: nickname,
+            text: data.text,
+            type: data.type || 'text',
+            replyTo: data.replyTo || null,
+            role: user && user.isAdmin ? 'מנהל' : null,
+            time: new Date().toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' }),
+            readBy: [socket.id],
+            reactions: {},
+            isAllRead: false
+        };
+
+        if (!messages[currentRoom]) messages[currentRoom] = [];
+        messages[currentRoom].push(newMessage);
+
+        io.to(currentRoom).emit('new-message', newMessage);
+
+        // שליחת התראה לכל חברי החדר שלא נמצאים בו כרגע
+        if (currentRoom !== 'public' && privateRooms[currentRoom]) {
+            let roomMembers = privateRooms[currentRoom].members;
+            roomMembers.forEach(memberNick => {
+                if (memberNick !== nickname) {
+                    for (let id in users) {
+                        if (users[id].nickname === memberNick) {
+                            io.to(id).emit('room-notification', { roomId: currentRoom, roomName: privateRooms[currentRoom].name, sender: nickname });
+                        }
+                    }
+                }
+            });
+        }
+    });
+
+    socket.on('mark-as-read', () => {
+        let currentRoom = 'public';
+        for (let r of socket.rooms) {
+            if (r !== socket.id) { currentRoom = r; break; }
+        }
+
+        if (messages[currentRoom]) {
+            let updated = false;
+            messages[currentRoom].forEach(msg => {
+                if (!msg.readBy) msg.readBy = [];
+                if (!msg.readBy.includes(socket.id)) {
+                    msg.readBy.push(socket.id);
+                    updated = true;
+                }
+                let allReadNow = checkAllReadStatus(currentRoom, msg);
+                if (msg.isAllRead !== allReadNow) {
+                    msg.isAllRead = allReadNow;
+                    updated = true;
+                }
+            });
+
+            if (updated) {
+                io.to(currentRoom).emit('update-messages-status', messages[currentRoom]);
+            }
+        }
+    });
+
+    socket.on('typing', (isTyping) => {
+        let currentRoom = 'public';
+        for (let r of socket.rooms) {
+            if (r !== socket.id) { currentRoom = r; break; }
+        }
+        const user = users[socket.id];
+        if (user) {
+            socket.to(currentRoom).emit('user-typing', {
+                nickname: user.nickname,
+                isTyping: isTyping
+            });
+        }
+    });
+
+    socket.on('delete-message', (messageId) => {
+        let currentRoom = 'public';
+        for (let r of socket.rooms) {
+            if (r !== socket.id) { currentRoom = r; break; }
+        }
+        
+        if (messages[currentRoom]) {
+            messages[currentRoom] = messages[currentRoom].filter(m => m.id !== messageId);
+            io.to(currentRoom).emit('message-deleted', messageId);
+        }
+    });
+
+    socket.on('reaction-message', (data) => {
+        let currentRoom = 'public';
+        for (let r of socket.rooms) {
+            if (r !== socket.id) { currentRoom = r; break; }
+        }
+        
+        const { messageId, emoji } = data;
+        const user = users[socket.id];
+        if (!user) return;
+        const nickname = user.nickname;
+
+        if (messages[currentRoom]) {
+            const msg = messages[currentRoom].find(m => m.id === messageId);
+            if (msg) {
+                if (!msg.reactions) msg.reactions = {};
+                
+                if (msg.reactions[nickname] === emoji) {
+                    delete msg.reactions[nickname]; 
+                } else {
+                    msg.reactions[nickname] = emoji; 
+                }
+
+                io.to(currentRoom).emit('message-reaction-updated', { messageId, reactions: msg.reactions });
+            }
+        }
+    });
+
+    socket.on('clear-current-chat', (roomId) => {
+        if (users[socket.id] && users[socket.id].isAdmin) {
+            messages[roomId] = [];
+            io.to(roomId).emit('load-messages', []);
+        }
+    });
+
+    socket.on('delete-private-room', (roomId) => {
+        delete privateRooms[roomId];
+        delete messages[roomId];
+        io.to(roomId).emit('room-deleted-by-admin', roomId);
+        updateAllData();
+    });
+
+    socket.on('ban-user', (data) => {
+        if (users[socket.id] && users[socket.id].isAdmin) {
+            const { targetId, durationMs } = data;
+            bannedUsers[targetId] = Date.now() + durationMs;
+            if (io.sockets.sockets.get(targetId)) {
+                io.sockets.sockets.get(targetId).emit('banned', 'הושתה עליך חסימה.');
+                io.sockets.sockets.get(targetId).disconnect();
+            }
+            delete users[targetId];
+            updateAllData();
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log('משתמש התנתק:', socket.id);
+        if (users[socket.id]) {
+            users[socket.id].online = false;
+            users[socket.id].lastSeen = new Date().toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' });
+        }
+        updateAllData();
+    });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`השרת רץ בהצלחה בפורט ${PORT}`);
+});
