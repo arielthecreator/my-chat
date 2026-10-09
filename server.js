@@ -159,7 +159,7 @@ io.on('connection', (socket) => {
         updateAllData();
     });
 
-    // פתיחת קבוצה מרובת משתמשים עם הגדרות וניהול וואטסאפ
+    // פתיחת קבוצה מרובת משתמשים
     socket.on('create-group-room', (data) => {
         const { roomName, selectedMembers } = data;
         const creatorNick = users[socket.id] ? users[socket.id].nickname : 'אורח';
@@ -171,10 +171,10 @@ io.on('connection', (socket) => {
         privateRooms[roomId] = {
             name: roomName,
             members: members,
-            admins: [creatorNick], // יוצר הקבוצה הוא מנהל ראשוני
+            admins: [creatorNick],
             settings: {
-                editNameBy: 'all',     // ברירת מחדל: כולם יכולים לשנות שם
-                addMembersBy: 'all'    // ברירת מחדל: כולם יכולים להוסיף חברים
+                editNameBy: 'all',
+                addMembersBy: 'all'
             }
         };
         messages[roomId] = [];
@@ -193,17 +193,18 @@ io.on('connection', (socket) => {
         updateAllData();
     });
 
-    // עדכון הגדרות קבוצה (שם, מנהלים, הרשאות)
+    // עדכון הגדרות קבוצה
     socket.on('update-group-settings', (data) => {
         const { roomId, newName, settings } = data;
         const user = users[socket.id];
         if (!user || !privateRooms[roomId]) return;
 
         let room = privateRooms[roomId];
-        let isCreatorOrAdmin = room.admins && room.admins.includes(user.nickname);
+        let isGroupAdmin = room.admins && room.admins.includes(user.nickname);
+        let isSuperAdmin = user.isAdmin;
 
         if (newName && newName.trim() !== '') {
-            if (room.settings.editNameBy === 'admin' && !isCreatorOrAdmin && !user.isAdmin) {
+            if (room.settings.editNameBy === 'admin' && !isGroupAdmin && !isSuperAdmin) {
                 socket.emit('error-msg', 'רק מנהל קבוצה יכול לשנות את שם הקבוצה.');
                 return;
             }
@@ -211,7 +212,7 @@ io.on('connection', (socket) => {
         }
 
         if (settings) {
-            if (!isCreatorOrAdmin && !user.isAdmin) {
+            if (!isGroupAdmin && !isSuperAdmin) {
                 socket.emit('error-msg', 'רק מנהל קבוצה יכול לשנות הגדרות.');
                 return;
             }
@@ -223,16 +224,17 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('room-settings-updated', room);
     });
 
-    // הוספת חברים לקבוצה קיימת
+    // הוספת חברים
     socket.on('add-members-to-group', (data) => {
         const { roomId, newMembers } = data;
         const user = users[socket.id];
         if (!user || !privateRooms[roomId]) return;
 
         let room = privateRooms[roomId];
-        let isCreatorOrAdmin = room.admins && room.admins.includes(user.nickname);
+        let isGroupAdmin = room.admins && room.admins.includes(user.nickname);
+        let isSuperAdmin = user.isAdmin;
 
-        if (room.settings.addMembersBy === 'admin' && !isCreatorOrAdmin && !user.isAdmin) {
+        if (room.settings.addMembersBy === 'admin' && !isGroupAdmin && !isSuperAdmin) {
             socket.emit('error-msg', 'רק מנהל קבוצה יכול להוסיף חברים חדשים.');
             return;
         }
@@ -240,7 +242,6 @@ io.on('connection', (socket) => {
         newMembers.forEach(nick => {
             if (!room.members.includes(nick)) {
                 room.members.push(nick);
-                // צרוף לסוקט אם מחובר
                 for (let id in users) {
                     if (users[id].nickname === nick) {
                         let s = io.sockets.sockets.get(id);
@@ -254,16 +255,17 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('room-settings-updated', room);
     });
 
-    // הסרת חבר מהקבוצה או מינוי/הסרת מנהל
+    // ניהול משתמשים (הסרה, מינוי מנהל, הורדה ממנהל)
     socket.on('manage-group-member', (data) => {
-        const { roomId, targetNickname, action } = data; // actions: 'remove', 'promote', 'demote'
+        const { roomId, targetNickname, action } = data;
         const user = users[socket.id];
         if (!user || !privateRooms[roomId]) return;
 
         let room = privateRooms[roomId];
-        let isCreatorOrAdmin = room.admins && room.admins.includes(user.nickname);
+        let isGroupAdmin = room.admins && room.admins.includes(user.nickname);
+        let isSuperAdmin = user.isAdmin;
 
-        if (!isCreatorOrAdmin && !user.isAdmin) {
+        if (!isGroupAdmin && !isSuperAdmin) {
             socket.emit('error-msg', 'פעולת ניהול מותרת למנהלים בלבד.');
             return;
         }
@@ -271,7 +273,6 @@ io.on('connection', (socket) => {
         if (action === 'remove') {
             room.members = room.members.filter(m => m !== targetNickname);
             room.admins = room.admins.filter(a => a !== targetNickname);
-            // הוצאה מהסוקט
             for (let id in users) {
                 if (users[id].nickname === targetNickname) {
                     let s = io.sockets.sockets.get(id);
@@ -283,6 +284,11 @@ io.on('connection', (socket) => {
                 room.admins.push(targetNickname);
             }
         } else if (action === 'demote') {
+            // מניעת הסרת מנהל אחרון אם יש עוד חברים
+            if (room.admins.length === 1 && room.members.length > 1) {
+                socket.emit('error-msg', 'חייב להישאר לפחות מנהל אחד בקבוצה לפני הסרת מנהל זה.');
+                return;
+            }
             room.admins = room.admins.filter(a => a !== targetNickname);
         }
 
@@ -290,12 +296,20 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('room-settings-updated', room);
     });
 
-    // עזיבת קבוצה ע"י משתמש
+    // עזיבת קבוצה ע"י חבר
     socket.on('leave-group', (roomId) => {
         const user = users[socket.id];
         if (!user || !privateRooms[roomId]) return;
 
         let room = privateRooms[roomId];
+        let isGroupAdmin = room.admins && room.admins.includes(user.nickname);
+
+        // בדיקה אם מנהל יחיד מנסה לעזוב כשיש עוד חברים בקבוצה
+        if (isGroupAdmin && room.admins.length === 1 && room.members.length > 1) {
+            socket.emit('error-msg', 'אינך יכול לעזוב כי אתה מנהל יחיד. עליך למנות מנהל אחר לפני העזיבה.');
+            return;
+        }
+
         room.members = room.members.filter(m => m !== user.nickname);
         room.admins = room.admins.filter(a => a !== user.nickname);
         socket.leave(roomId);
