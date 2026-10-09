@@ -284,7 +284,6 @@ io.on('connection', (socket) => {
                 room.admins.push(targetNickname);
             }
         } else if (action === 'demote') {
-            // מניעת הסרת מנהל אחרון אם יש עוד חברים
             if (room.admins.length === 1 && room.members.length > 1) {
                 socket.emit('error-msg', 'חייב להישאר לפחות מנהל אחד בקבוצה לפני הסרת מנהל זה.');
                 return;
@@ -304,7 +303,6 @@ io.on('connection', (socket) => {
         let room = privateRooms[roomId];
         let isGroupAdmin = room.admins && room.admins.includes(user.nickname);
 
-        // בדיקה אם מנהל יחיד מנסה לעזוב כשיש עוד חברים בקבוצה
         if (isGroupAdmin && room.admins.length === 1 && room.members.length > 1) {
             socket.emit('error-msg', 'אינך יכול לעזוב כי אתה מנהל יחיד. עליך למנות מנהל אחר לפני העזיבה.');
             return;
@@ -335,150 +333,4 @@ io.on('connection', (socket) => {
             text: data.text,
             type: data.type || 'text',
             replyTo: data.replyTo || null,
-            role: user && user.isAdmin ? 'מנהל' : null,
-            time: new Date().toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' }),
-            readBy: [socket.id],
-            reactions: {},
-            isAllRead: false
-        };
-
-        if (!messages[currentRoom]) messages[currentRoom] = [];
-        messages[currentRoom].push(newMessage);
-
-        io.to(currentRoom).emit('new-message', newMessage);
-
-        if (currentRoom !== 'public' && privateRooms[currentRoom]) {
-            let roomMembers = privateRooms[currentRoom].members;
-            roomMembers.forEach(memberNick => {
-                if (memberNick !== nickname) {
-                    for (let id in users) {
-                        if (users[id].nickname === memberNick) {
-                            io.to(id).emit('room-notification', { roomId: currentRoom, roomName: privateRooms[currentRoom].name, sender: nickname });
-                        }
-                    }
-                }
-            });
-        }
-    });
-
-    socket.on('mark-as-read', () => {
-        let currentRoom = 'public';
-        for (let r of socket.rooms) {
-            if (r !== socket.id) { currentRoom = r; break; }
-        }
-
-        if (messages[currentRoom]) {
-            let updated = false;
-            messages[currentRoom].forEach(msg => {
-                if (!msg.readBy) msg.readBy = [];
-                if (!msg.readBy.includes(socket.id)) {
-                    msg.readBy.push(socket.id);
-                    updated = true;
-                }
-                let allReadNow = checkAllReadStatus(currentRoom, msg);
-                if (msg.isAllRead !== allReadNow) {
-                    msg.isAllRead = allReadNow;
-                    updated = true;
-                }
-            });
-
-            if (updated) {
-                io.to(currentRoom).emit('update-messages-status', messages[currentRoom]);
-            }
-        }
-    });
-
-    socket.on('typing', (isTyping) => {
-        let currentRoom = 'public';
-        for (let r of socket.rooms) {
-            if (r !== socket.id) { currentRoom = r; break; }
-        }
-        const user = users[socket.id];
-        if (user) {
-            socket.to(currentRoom).emit('user-typing', {
-                nickname: user.nickname,
-                isTyping: isTyping
-            });
-        }
-    });
-
-    socket.on('delete-message', (messageId) => {
-        let currentRoom = 'public';
-        for (let r of socket.rooms) {
-            if (r !== socket.id) { currentRoom = r; break; }
-        }
-        
-        if (messages[currentRoom]) {
-            messages[currentRoom] = messages[currentRoom].filter(m => m.id !== messageId);
-            io.to(currentRoom).emit('message-deleted', messageId);
-        }
-    });
-
-    socket.on('reaction-message', (data) => {
-        let currentRoom = 'public';
-        for (let r of socket.rooms) {
-            if (r !== socket.id) { currentRoom = r; break; }
-        }
-        
-        const { messageId, emoji } = data;
-        const user = users[socket.id];
-        if (!user) return;
-        const nickname = user.nickname;
-
-        if (messages[currentRoom]) {
-            const msg = messages[currentRoom].find(m => m.id === messageId);
-            if (msg) {
-                if (!msg.reactions) msg.reactions = {};
-                
-                if (msg.reactions[nickname] === emoji) {
-                    delete msg.reactions[nickname]; 
-                } else {
-                    msg.reactions[nickname] = emoji; 
-                }
-
-                io.to(currentRoom).emit('message-reaction-updated', { messageId, reactions: msg.reactions });
-            }
-        }
-    });
-
-    socket.on('clear-current-chat', (roomId) => {
-        if (users[socket.id] && users[socket.id].isAdmin) {
-            messages[roomId] = [];
-            io.to(roomId).emit('load-messages', []);
-        }
-    });
-
-    socket.on('delete-private-room', (roomId) => {
-        delete privateRooms[roomId];
-        delete messages[roomId];
-        io.to(roomId).emit('room-deleted-by-admin', roomId);
-        updateAllData();
-    });
-
-    socket.on('ban-user', (data) => {
-        if (users[socket.id] && users[socket.id].isAdmin) {
-            const { targetId, durationMs } = data;
-            bannedUsers[targetId] = Date.now() + durationMs;
-            if (io.sockets.sockets.get(targetId)) {
-                io.sockets.sockets.get(targetId).emit('banned', 'הושתה עליך חסימה.');
-                io.sockets.sockets.get(targetId).disconnect();
-            }
-            delete users[targetId];
-            updateAllData();
-        }
-    });
-
-    socket.on('disconnect', () => {
-        console.log('משתמש התנתק:', socket.id);
-        if (users[socket.id]) {
-            users[socket.id].online = false;
-            users[socket.id].lastSeen = new Date().toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' });
-        }
-        updateAllData();
-    });
-});
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`השרת רץ בהצלחה בפורט ${PORT}`);
-});
+            role:
