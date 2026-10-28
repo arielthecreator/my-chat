@@ -1,7 +1,6 @@
 services:
   - type: web
     name: my-chat
-    env: node
+    runtime: node
     buildCommand: npm install
     startCommand: node server.js
-    plan: free
