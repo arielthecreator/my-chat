@@ -4,7 +4,9 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+    maxHttpBufferSize: 10 * 1024 * 1024 // הגדלת נפח להעלאת תמונות ואודיו
+});
 
 app.use(express.static('public'));
 
@@ -22,6 +24,7 @@ function updateAllData() {
         id: id,
         nickname: users[id].nickname,
         isAdmin: users[id].isAdmin,
+        canSendImages: users[id].canSendImages || false, // מעקב אחר הרשאת תמונות
         online: users[id].online,
         lastSeen: users[id].lastSeen
     }));
@@ -66,8 +69,10 @@ io.on('connection', (socket) => {
     socket.on('join', (data) => {
         const { nickname, isAdmin } = data;
         
+        let existingCanSendImages = false;
         for (let id in users) {
-            if (users[id].nickname === nickname && id !== socket.id) {
+            if (users[id].nickname === nickname) {
+                existingCanSendImages = users[id].canSendImages || false;
                 delete users[id];
             }
         }
@@ -75,6 +80,7 @@ io.on('connection', (socket) => {
         users[socket.id] = {
             nickname: nickname,
             isAdmin: isAdmin || false,
+            canSendImages: isAdmin ? true : existingCanSendImages, // מנהל תמיד יכול, או שומר את ההרשאה הקודמת
             online: true,
             lastSeen: 'עכשיו'
         };
@@ -86,11 +92,28 @@ io.on('connection', (socket) => {
 
     socket.on('verify-admin', (password) => {
         if (password === ADMIN_PASSWORD) {
-            if (users[socket.id]) users[socket.id].isAdmin = true;
+            if (users[socket.id]) {
+                users[socket.id].isAdmin = true;
+                users[socket.id].canSendImages = true; // מנהל מקבל אוטומטית הרשאת תמונות
+            }
             socket.emit('admin-success', true);
             updateAllData();
         } else {
             socket.emit('admin-success', false);
+        }
+    });
+
+    // ניהול הרשאת שליחת תמונות למשתמש ספציפי ע"י מנהל
+    socket.on('toggle-image-permission', (targetSocketId) => {
+        const user = users[socket.id];
+        if (!user || !user.isAdmin) {
+            socket.emit('error-msg', 'פעולה מותרת למנהלים בלבד.');
+            return;
+        }
+
+        if (users[targetSocketId]) {
+            users[targetSocketId].canSendImages = !users[targetSocketId].canSendImages;
+            updateAllData();
         }
     });
 
@@ -103,7 +126,6 @@ io.on('connection', (socket) => {
         socket.emit('load-messages', messages[roomId]);
     });
 
-    // צ'אט אישי (בין שניים)
     socket.on('create-private-room', (data) => {
         const { roomName, targetNickname } = data;
         const creatorNick = users[socket.id] ? users[socket.id].nickname : 'אורח';
@@ -159,7 +181,6 @@ io.on('connection', (socket) => {
         updateAllData();
     });
 
-    // פתיחת קבוצה מרובת משתמשים
     socket.on('create-group-room', (data) => {
         const { roomName, selectedMembers } = data;
         const creatorNick = users[socket.id] ? users[socket.id].nickname : 'אורח';
@@ -193,7 +214,6 @@ io.on('connection', (socket) => {
         updateAllData();
     });
 
-    // עדכון הגדרות קבוצה
     socket.on('update-group-settings', (data) => {
         const { roomId, newName, settings } = data;
         const user = users[socket.id];
@@ -224,7 +244,6 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('room-settings-updated', room);
     });
 
-    // הוספת חברים
     socket.on('add-members-to-group', (data) => {
         const { roomId, newMembers } = data;
         const user = users[socket.id];
@@ -255,7 +274,6 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('room-settings-updated', room);
     });
 
-    // ניהול משתמשים (הסרה, מינוי מנהל, הורדה ממנהל)
     socket.on('manage-group-member', (data) => {
         const { roomId, targetNickname, action } = data;
         const user = users[socket.id];
@@ -295,7 +313,6 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('room-settings-updated', room);
     });
 
-    // עזיבת קבוצה ע"י חבר
     socket.on('leave-group', (roomId) => {
         const user = users[socket.id];
         if (!user || !privateRooms[roomId]) return;
@@ -326,11 +343,20 @@ io.on('connection', (socket) => {
         const user = users[socket.id];
         const nickname = user ? user.nickname : data.nickname;
 
+        // בדיקת הרשאה לשליחת תמונות (רק מי שיש לו canSendImages מאושר)
+        if (data.type === 'image') {
+            if (!user || !user.canSendImages) {
+                socket.emit('error-msg', 'אין לך הרשאה לשלוח תמונות בצ\'אט.');
+                return;
+            }
+        }
+
         const newMessage = {
             id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
             senderSocketId: socket.id,
             nickname: nickname,
-            text: data.text,
+            text: data.text || '',
+            mediaData: data.mediaData || null,
             type: data.type || 'text',
             replyTo: data.replyTo || null,
             role: user && user.isAdmin ? 'מנהל' : null,
