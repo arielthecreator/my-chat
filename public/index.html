@@ -318,7 +318,30 @@
             font-size: 20px;
             cursor: pointer;
             padding: 4px;
-            display: none; /* יוצג אוטומטית רק למי שיש לו הרשאה */
+            display: none; /* מוסתר כברירת מחדל עד לקבלת הרשאה */
+        }
+
+        /* עיצוב בר הקלטה כמו ווטסאפ */
+        #recording-bar {
+            display: none;
+            align-items: center;
+            padding: 8px 12px;
+            background: white;
+            border-top: 1px solid #ddd;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        .recording-pulse {
+            width: 12px;
+            height: 12px;
+            background: red;
+            border-radius: 50%;
+            animation: pulse 1.2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.4); opacity: 0.4; }
+            100% { transform: scale(1); opacity: 1; }
         }
 
         #sidebar {
@@ -425,7 +448,7 @@
         }
         .emoji-picker-row span { cursor: pointer; font-size: 16px; }
         
-        #ban-modal, #group-modal, #group-info-modal, #add-members-modal, #admin-image-modal {
+        #ban-modal, #group-modal, #group-info-modal, #add-members-modal {
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -502,11 +525,26 @@
                 <button id="cancel-reply-btn" onclick="cancelReply()">✕</button>
             </div>
 
+            <!-- קלטת אודיו חיה כמו ווטסאפ (מוצגת רק בזמן הקלטה או האזנה לפני שליחה) -->
+            <div id="recording-bar">
+                <div id="recording-indicator-wrap" style="display:flex; align-items:center; gap:8px; flex:1;">
+                    <div class="recording-pulse"></div>
+                    <span id="recording-timer" style="font-size:13px; font-weight:bold; color:#e53935;">00:00</span>
+                </div>
+                <div id="preview-audio-wrap" style="display:none; flex:1; align-items:center;">
+                    <audio id="audio-preview-element" controls style="width:100%; height:32px;"></audio>
+                </div>
+                <button type="button" onclick="cancelActiveRecording()" style="background:#e53935; color:white; border:none; border-radius:4px; padding:6px 10px; cursor:pointer; font-size:12px;">🗑️ מחק</button>
+                <button type="button" id="send-recorded-audio-btn" onclick="sendRecordedAudio()" style="background:#4caf50; color:white; border:none; border-radius:4px; padding:6px 10px; cursor:pointer; font-size:12px; display:none;">✔ שלח</button>
+            </div>
+
             <form id="chat-form">
-                <!-- כפתור תמונות (מוצג אוטומטית רק למי שיש לו הרשאה ממנהל או שהוא מנהל) -->
-                <button type="button" class="action-icon-btn" id="image-upload-btn" onclick="openImageModal()" title="שלח תמונה">📷</button>
-                <!-- כפתור הקלטת קול -->
-                <button type="button" class="action-icon-btn" id="mic-btn" onclick="toggleAudioRecording()" title="הקלט הודעה קולית" style="display:inline-block;">🎙️</button>
+                <!-- כפתור תמונות (מוצג אוטומטית רק למורשים) עם אפשרות גלריה או מצלמה חיה -->
+                <input type="file" id="camera-file-input" accept="image/*" capture="environment" style="display:none;" onchange="handleImageSelected(event)">
+                <input type="file" id="gallery-file-input" accept="image/*" style="display:none;" onchange="handleImageSelected(event)">
+                
+                <button type="button" class="action-icon-btn" id="image-upload-btn" onclick="openImageOptions()" title="שלח תמונה">📷</button>
+                <button type="button" class="action-icon-btn" id="mic-btn" onclick="startAudioRecording()" title="הקלט הודעה קולית" style="display:inline-block;">🎙️</button>
                 
                 <input type="text" id="chat-input" placeholder="כתוב הודעה..." autocomplete="off">
                 <button type="submit">שלח</button>
@@ -514,16 +552,13 @@
         </div>
     </div>
 
-    <!-- מודל שליחת תמונה למשתמשים מורשים -->
-    <div id="admin-image-modal">
-        <div class="modal-content">
-            <h4 style="margin:0 0 5px 0;">שליחת תמונה</h4>
-            <p style="font-size:12px; color:#666; margin:0;">בחר תמונה מהמכשיר:</p>
-            <input type="file" id="admin-image-file" accept="image/*" style="font-size:14px;">
-            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
-                <button onclick="closeImageModal()" style="background:#ccc; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">ביטול</button>
-                <button onclick="sendUserImage()" style="background:#0084ff; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">שלח</button>
-            </div>
+    <!-- מודל בחירת סוג צילום (גלריה או מצלמה חיה) -->
+    <div id="image-source-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; justify-content:center; align-items:center;">
+        <div class="modal-content" style="text-align:center;">
+            <h4 style="margin:0 0 10px 0;">בחר מקור תמונה</h4>
+            <button onclick="document.getElementById('camera-file-input').click(); closeImageSourceModal();" style="background:#0084ff; color:white; border:none; padding:10px; border-radius:5px; cursor:pointer; font-size:14px; margin-bottom:6px; width:100%;">📸 צלם תמונה חיה</button>
+            <button onclick="document.getElementById('gallery-file-input').click(); closeImageSourceModal();" style="background:#607d8b; color:white; border:none; padding:10px; border-radius:5px; cursor:pointer; font-size:14px; width:100%;">🖼️ בחר מהגלריה</button>
+            <button onclick="closeImageSourceModal()" style="background:#ccc; border:none; padding:6px; border-radius:4px; cursor:pointer; margin-top:10px; width:100%;">ביטול</button>
         </div>
     </div>
 
@@ -613,10 +648,11 @@
         const replyPreviewContainer = document.getElementById('reply-preview-container');
         const replyPreviewContent = document.getElementById('reply-preview-content');
         const imageUploadBtn = document.getElementById('image-upload-btn');
+        const recordingBar = document.getElementById('recording-bar');
 
         let currentNickname = localStorage.getItem('chat_nickname') || '';
         let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
-        let canSendImages = false; // האם למשתמש הנוכחי יש הרשאת תמונות
+        let canSendImages = false;
         let currentRoomId = 'public';
         let globalUsers = [];
         let globalRooms = {};
@@ -626,10 +662,12 @@
         let currentReplyingTo = null;
         let unreadRoomsMap = {};
 
-        // משתנים להקלטת קול
+        // משתנים להקלטת קול מתקדמת (כמו ווטסאפ)
         let mediaRecorder;
         let audioChunks = [];
-        let isRecording = false;
+        let recordedAudioBlob = null;
+        let recordingTimerInterval;
+        let recordingSeconds = 0;
 
         if (currentNickname) {
             loginScreen.style.display = 'none';
@@ -691,6 +729,7 @@
             typingIndicator.innerText = data.isTyping ? `${data.nickname} מקליד/ה...` : '';
         });
 
+        // שליחת הודעה גם באנטר (Enter) וגם בלחיצה על כפתור שלח
         chatForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const text = chatInput.value.trim();
@@ -714,25 +753,21 @@
             }
         });
 
-        // פונקציות תמונות
-        function openImageModal() {
+        // בחירת תמונה (מצלמה חיה או גלריה)
+        function openImageOptions() {
             if (!canSendImages) {
                 alert('אין לך הרשאה לשלוח תמונות בצ\'אט.');
                 return;
             }
-            document.getElementById('admin-image-modal').style.display = 'flex';
+            document.getElementById('image-source-modal').style.display = 'flex';
         }
-        function closeImageModal() {
-            document.getElementById('admin-image-modal').style.display = 'none';
-            document.getElementById('admin-image-file').value = '';
+        function closeImageSourceModal() {
+            document.getElementById('image-source-modal').style.display = 'none';
         }
-        function sendUserImage() {
-            const fileInput = document.getElementById('admin-image-file');
-            if (fileInput.files.length === 0) {
-                alert('אנא בחר תמונה תחילה.');
-                return;
-            }
-            const file = fileInput.files[0];
+
+        function handleImageSelected(event) {
+            const file = event.target.files[0];
+            if (!file) return;
             const reader = new FileReader();
             reader.onload = function(e) {
                 socket.emit('chat-message', {
@@ -742,13 +777,13 @@
                     text: 'תמונה',
                     replyTo: currentReplyingTo ? { id: currentReplyingTo.id, nickname: currentReplyingTo.nickname, text: currentReplyingTo.text } : null
                 });
-                closeImageModal();
                 cancelReply();
+                event.target.value = ''; // איפוס הקלט
             };
             reader.readAsDataURL(file);
         }
 
-        // ניהול הרשאת תמונות ע"י מנהל מתוך פאנל הניהול
+        // ניהול הרשאת תמונות ע"י מנהל
         function toggleImagePermissionConfirm(targetSocketId, targetNick, currentStatus) {
             let actionText = currentStatus ? "להסיר" : "לתת";
             if (confirm(`האם אתה בטוח שברצונך ${actionText} הרשאת שליחת תמונות למשתמש "${targetNick}"?`)) {
@@ -756,51 +791,91 @@
             }
         }
 
-        // פונקציות הקלטת קול
-        async function toggleAudioRecording() {
-            const micBtn = document.getElementById('mic-btn');
-            if (!isRecording) {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    mediaRecorder = new MediaRecorder(stream);
-                    audioChunks = [];
+        // --- הקלטת אודיו מתקדמת כמו ווטסאפ ---
+        async function startAudioRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
 
-                    mediaRecorder.ondataavailable = event => {
-                        audioChunks.push(event.data);
-                    };
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
 
-                    mediaRecorder.onstop = () => {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                        const reader = new FileReader();
-                        reader.readAsDataURL(audioBlob);
-                        reader.onloadend = function() {
-                            socket.emit('chat-message', {
-                                nickname: currentNickname,
-                                type: 'audio',
-                                mediaData: reader.result,
-                                text: 'הודעה קולית',
-                                replyTo: currentReplyingTo ? { id: currentReplyingTo.id, nickname: currentReplyingTo.nickname, text: currentReplyingTo.text } : null
-                            });
-                            cancelReply();
-                        };
-                        stream.getTracks().forEach(track => track.stop());
-                    };
+                mediaRecorder.onstop = () => {
+                    recordedAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const audioUrl = URL.createObjectURL(recordedAudioBlob);
+                    
+                    // הצגת נגן להאזנה לפני שליחה
+                    document.getElementById('recording-indicator-wrap').style.display = 'none';
+                    document.getElementById('preview-audio-wrap').style.display = 'flex';
+                    document.getElementById('audio-preview-element').src = audioUrl;
+                    document.getElementById('send-recorded-audio-btn').style.display = 'inline-block';
+                    
+                    stream.getTracks().forEach(track => track.stop());
+                };
 
-                    mediaRecorder.start();
-                    isRecording = true;
-                    micBtn.innerText = "⏹️";
-                    micBtn.style.color = "red";
-                    typingIndicator.innerText = "מקליט הודעה קולית...";
-                } catch (err) {
-                    alert('אין גישה למיקרופון או שהמכשיר אינו תומך בהקלטה.');
-                }
-            } else {
-                mediaRecorder.stop();
-                isRecording = false;
-                micBtn.innerText = "🎙️";
-                micBtn.style.color = "black";
-                typingIndicator.innerText = "";
+                mediaRecorder.start();
+                recordingSeconds = 0;
+                document.getElementById('recording-timer').innerText = "00:00";
+                recordingBar.style.display = 'flex';
+                document.getElementById('recording-indicator-wrap').style.display = 'flex';
+                document.getElementById('preview-audio-wrap').style.display = 'none';
+                document.getElementById('send-recorded-audio-btn').style.display = 'none';
+                chatForm.style.display = 'none'; // הסתרת טקסט ההקלדה בזמן הקלטה
+
+                recordingTimerInterval = setInterval(() => {
+                    recordingSeconds++;
+                    let mins = Math.floor(recordingSeconds / 60).toString().padStart(2, '0');
+                    let secs = (recordingSeconds % 60).toString().padStart(2, '0');
+                    document.getElementById('recording-timer').innerText = `${mins}:${secs}`;
+                }, 1000);
+
+                // לחיצה שנייה על המיקרופון עוצרת את ההקלטה ומעבירה למצב האזנה
+                document.getElementById('mic-btn').setAttribute('onclick', 'stopAudioRecording()');
+                document.getElementById('mic-btn').style.color = "red";
+
+            } catch (err) {
+                alert('אין גישה למיקרופון או שהמכשיר אינו תומך בהקלטה.');
             }
+        }
+
+        function stopAudioRecording() {
+            clearInterval(recordingTimerInterval);
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            document.getElementById('mic-btn').setAttribute('onclick', 'startAudioRecording()');
+            document.getElementById('mic-btn').style.color = "black";
+        }
+
+        function cancelActiveRecording() {
+            clearInterval(recordingTimerInterval);
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            recordedAudioBlob = null;
+            recordingBar.style.display = 'none';
+            chatForm.style.display = 'flex';
+            document.getElementById('mic-btn').setAttribute('onclick', 'startAudioRecording()');
+            document.getElementById('mic-btn').style.color = "black";
+        }
+
+        function sendRecordedAudio() {
+            if (!recordedAudioBlob) return;
+            const reader = new FileReader();
+            reader.readAsDataURL(recordedAudioBlob);
+            reader.onloadend = function() {
+                socket.emit('chat-message', {
+                    nickname: currentNickname,
+                    type: 'audio',
+                    mediaData: reader.result,
+                    text: 'הודעה קולית',
+                    replyTo: currentReplyingTo ? { id: currentReplyingTo.id, nickname: currentReplyingTo.nickname, text: currentReplyingTo.text } : null
+                });
+                cancelActiveRecording();
+                cancelReply();
+            };
         }
 
         menuToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
@@ -1273,7 +1348,6 @@
                 uniqueUsersMap[u.nickname] = u;
                 if (u.nickname === currentNickname) {
                     canSendImages = u.canSendImages;
-                    // הצגה/הסרה של כפתור התמונות אצל המשתמש בזמן אמת לפי האישור שלך
                     if (canSendImages) {
                         imageUploadBtn.style.display = 'inline-block';
                     } else {
