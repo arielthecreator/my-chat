@@ -5,7 +5,7 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-    maxHttpBufferSize: 10 * 1024 * 1024 // הגדלת נפח להעלאת תמונות ואודיו
+    maxHttpBufferSize: 15 * 1024 * 1024 // הגדלת נפח להעברת תמונות ואודיו
 });
 
 app.use(express.static('public'));
@@ -24,7 +24,7 @@ function updateAllData() {
         id: id,
         nickname: users[id].nickname,
         isAdmin: users[id].isAdmin,
-        canSendImages: users[id].canSendImages || false, // מעקב אחר הרשאת תמונות
+        canSendImages: users[id].canSendImages || false,
         online: users[id].online,
         lastSeen: users[id].lastSeen
     }));
@@ -80,7 +80,7 @@ io.on('connection', (socket) => {
         users[socket.id] = {
             nickname: nickname,
             isAdmin: isAdmin || false,
-            canSendImages: isAdmin ? true : existingCanSendImages, // מנהל תמיד יכול, או שומר את ההרשאה הקודמת
+            canSendImages: isAdmin ? true : existingCanSendImages,
             online: true,
             lastSeen: 'עכשיו'
         };
@@ -94,7 +94,7 @@ io.on('connection', (socket) => {
         if (password === ADMIN_PASSWORD) {
             if (users[socket.id]) {
                 users[socket.id].isAdmin = true;
-                users[socket.id].canSendImages = true; // מנהל מקבל אוטומטית הרשאת תמונות
+                users[socket.id].canSendImages = true;
             }
             socket.emit('admin-success', true);
             updateAllData();
@@ -103,7 +103,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // ניהול הרשאת שליחת תמונות למשתמש ספציפי ע"י מנהל
     socket.on('toggle-image-permission', (targetSocketId) => {
         const user = users[socket.id];
         if (!user || !user.isAdmin) {
@@ -343,7 +342,6 @@ io.on('connection', (socket) => {
         const user = users[socket.id];
         const nickname = user ? user.nickname : data.nickname;
 
-        // בדיקת הרשאה לשליחת תמונות (רק מי שיש לו canSendImages מאושר)
         if (data.type === 'image') {
             if (!user || !user.canSendImages) {
                 socket.emit('error-msg', 'אין לך הרשאה לשלוח תמונות בצ\'אט.');
