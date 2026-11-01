@@ -312,6 +312,14 @@
             border-radius: 5px;
             cursor: pointer;
         }
+        .action-icon-btn {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px;
+            display: none; /* יוצג אוטומטית רק למי שיש לו הרשאה */
+        }
 
         #sidebar {
             position: absolute;
@@ -417,7 +425,7 @@
         }
         .emoji-picker-row span { cursor: pointer; font-size: 16px; }
         
-        #ban-modal, #group-modal, #group-info-modal, #add-members-modal {
+        #ban-modal, #group-modal, #group-info-modal, #add-members-modal, #admin-image-modal {
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -495,9 +503,27 @@
             </div>
 
             <form id="chat-form">
+                <!-- כפתור תמונות (מוצג אוטומטית רק למי שיש לו הרשאה ממנהל או שהוא מנהל) -->
+                <button type="button" class="action-icon-btn" id="image-upload-btn" onclick="openImageModal()" title="שלח תמונה">📷</button>
+                <!-- כפתור הקלטת קול -->
+                <button type="button" class="action-icon-btn" id="mic-btn" onclick="toggleAudioRecording()" title="הקלט הודעה קולית" style="display:inline-block;">🎙️</button>
+                
                 <input type="text" id="chat-input" placeholder="כתוב הודעה..." autocomplete="off">
                 <button type="submit">שלח</button>
             </form>
+        </div>
+    </div>
+
+    <!-- מודל שליחת תמונה למשתמשים מורשים -->
+    <div id="admin-image-modal">
+        <div class="modal-content">
+            <h4 style="margin:0 0 5px 0;">שליחת תמונה</h4>
+            <p style="font-size:12px; color:#666; margin:0;">בחר תמונה מהמכשיר:</p>
+            <input type="file" id="admin-image-file" accept="image/*" style="font-size:14px;">
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
+                <button onclick="closeImageModal()" style="background:#ccc; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">ביטול</button>
+                <button onclick="sendUserImage()" style="background:#0084ff; color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">שלח</button>
+            </div>
         </div>
     </div>
 
@@ -586,9 +612,11 @@
         
         const replyPreviewContainer = document.getElementById('reply-preview-container');
         const replyPreviewContent = document.getElementById('reply-preview-content');
+        const imageUploadBtn = document.getElementById('image-upload-btn');
 
         let currentNickname = localStorage.getItem('chat_nickname') || '';
         let isUserAdmin = localStorage.getItem('chat_is_admin') === 'true';
+        let canSendImages = false; // האם למשתמש הנוכחי יש הרשאת תמונות
         let currentRoomId = 'public';
         let globalUsers = [];
         let globalRooms = {};
@@ -597,6 +625,11 @@
         let isUserScrolledUp = false;
         let currentReplyingTo = null;
         let unreadRoomsMap = {};
+
+        // משתנים להקלטת קול
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
 
         if (currentNickname) {
             loginScreen.style.display = 'none';
@@ -611,7 +644,6 @@
             currentNickname = nick;
             localStorage.setItem('chat_nickname', currentNickname);
             
-            // מעבר מיידי של המסכים ללא תלות בתגובת השרת
             loginScreen.style.display = 'none';
             chatScreen.style.display = 'flex';
             userDisplay.innerText = currentNickname;
@@ -682,6 +714,95 @@
             }
         });
 
+        // פונקציות תמונות
+        function openImageModal() {
+            if (!canSendImages) {
+                alert('אין לך הרשאה לשלוח תמונות בצ\'אט.');
+                return;
+            }
+            document.getElementById('admin-image-modal').style.display = 'flex';
+        }
+        function closeImageModal() {
+            document.getElementById('admin-image-modal').style.display = 'none';
+            document.getElementById('admin-image-file').value = '';
+        }
+        function sendUserImage() {
+            const fileInput = document.getElementById('admin-image-file');
+            if (fileInput.files.length === 0) {
+                alert('אנא בחר תמונה תחילה.');
+                return;
+            }
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                socket.emit('chat-message', {
+                    nickname: currentNickname,
+                    type: 'image',
+                    mediaData: e.target.result,
+                    text: 'תמונה',
+                    replyTo: currentReplyingTo ? { id: currentReplyingTo.id, nickname: currentReplyingTo.nickname, text: currentReplyingTo.text } : null
+                });
+                closeImageModal();
+                cancelReply();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // ניהול הרשאת תמונות ע"י מנהל מתוך פאנל הניהול
+        function toggleImagePermissionConfirm(targetSocketId, targetNick, currentStatus) {
+            let actionText = currentStatus ? "להסיר" : "לתת";
+            if (confirm(`האם אתה בטוח שברצונך ${actionText} הרשאת שליחת תמונות למשתמש "${targetNick}"?`)) {
+                socket.emit('toggle-image-permission', targetSocketId);
+            }
+        }
+
+        // פונקציות הקלטת קול
+        async function toggleAudioRecording() {
+            const micBtn = document.getElementById('mic-btn');
+            if (!isRecording) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+
+                    mediaRecorder.ondataavailable = event => {
+                        audioChunks.push(event.data);
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        const reader = new FileReader();
+                        reader.readAsDataURL(audioBlob);
+                        reader.onloadend = function() {
+                            socket.emit('chat-message', {
+                                nickname: currentNickname,
+                                type: 'audio',
+                                mediaData: reader.result,
+                                text: 'הודעה קולית',
+                                replyTo: currentReplyingTo ? { id: currentReplyingTo.id, nickname: currentReplyingTo.nickname, text: currentReplyingTo.text } : null
+                            });
+                            cancelReply();
+                        };
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+
+                    mediaRecorder.start();
+                    isRecording = true;
+                    micBtn.innerText = "⏹️";
+                    micBtn.style.color = "red";
+                    typingIndicator.innerText = "מקליט הודעה קולית...";
+                } catch (err) {
+                    alert('אין גישה למיקרופון או שהמכשיר אינו תומך בהקלטה.');
+                }
+            } else {
+                mediaRecorder.stop();
+                isRecording = false;
+                micBtn.innerText = "🎙️";
+                micBtn.style.color = "black";
+                typingIndicator.innerText = "";
+            }
+        }
+
         menuToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
         closeSidebar.addEventListener('click', () => sidebar.classList.remove('open'));
 
@@ -703,6 +824,7 @@
         socket.on('admin-success', (success) => {
             if (success) {
                 isUserAdmin = true;
+                canSendImages = true;
                 localStorage.setItem('chat_is_admin', 'true');
                 alert('התחברת בהצלחה כמנהל!');
                 socket.emit('join', { nickname: currentNickname, isAdmin: true });
@@ -1021,7 +1143,16 @@
 
             let quotedHtml = '';
             if (data.replyTo) {
-                quotedHtml = `<div class="quoted-box"><strong>${data.replyTo.nickname}:</strong> ${data.replyTo.text}</div>`;
+                quotedHtml = `<div class="quoted-box"><strong>${data.replyTo.nickname}:</strong> ${data.replyTo.text || 'מדיה'}</div>`;
+            }
+
+            let contentHtml = '';
+            if (data.type === 'image' && data.mediaData) {
+                contentHtml = `<img src="${data.mediaData}" style="max-width:100%; border-radius:6px; margin-top:4px; cursor:pointer;" onclick="window.open(this.src)">`;
+            } else if (data.type === 'audio' && data.mediaData) {
+                contentHtml = `<audio controls src="${data.mediaData}" style="max-width:220px; height:35px; margin-top:4px;"></audio>`;
+            } else {
+                contentHtml = `<span class="msg-text">${data.text}</span>`;
             }
 
             let timeString = data.time || '';
@@ -1041,7 +1172,7 @@
                 </div>
                 ${quotedHtml}
                 <strong>${badgeHtml}${data.nickname}:</strong>
-                <span class="msg-text">${data.text}</span>
+                ${contentHtml}
                 <div class="reactions-container" id="reactions-${data.id}"></div>
                 <div class="msg-footer">
                     <span>${timeString}</span>
@@ -1094,7 +1225,7 @@
             const msg = activeMessagesData.find(m => m.id === msgId);
             if (!msg) return;
             currentReplyingTo = msg;
-            replyPreviewContent.innerHTML = `<strong>משיב ל-${msg.nickname}:</strong> ${msg.text}`;
+            replyPreviewContent.innerHTML = `<strong>משיב ל-${msg.nickname}:</strong> ${msg.text || 'מדיה'}`;
             replyPreviewContainer.style.display = 'flex';
             chatInput.focus();
             toggleMsgMenu(msgId);
@@ -1140,6 +1271,15 @@
             let uniqueUsersMap = {};
             (data.allUsers || []).forEach(u => {
                 uniqueUsersMap[u.nickname] = u;
+                if (u.nickname === currentNickname) {
+                    canSendImages = u.canSendImages;
+                    // הצגה/הסרה של כפתור התמונות אצל המשתמש בזמן אמת לפי האישור שלך
+                    if (canSendImages) {
+                        imageUploadBtn.style.display = 'inline-block';
+                    } else {
+                        imageUploadBtn.style.display = 'none';
+                    }
+                }
             });
             globalUsers = Object.values(uniqueUsersMap);
             globalRooms = data.privateRooms || {};
@@ -1182,7 +1322,7 @@
                 sidebarContent.appendChild(clearChatBtn);
 
                 let adminHeaderTitle = document.createElement('div');
-                adminHeaderTitle.innerHTML = '<br><strong style="color:#d32f2f; font-size:13px;">👥 רשימת משתמשים:</strong>';
+                adminHeaderTitle.innerHTML = '<br><strong style="color:#d32f2f; font-size:13px;">👥 רשימת משתמשים והרשאות:</strong>';
                 sidebarContent.appendChild(adminHeaderTitle);
 
                 globalUsers.forEach(user => {
@@ -1190,9 +1330,13 @@
                         const item = document.createElement('div');
                         item.className = 'user-mgmt-item';
                         let statusHtml = user.online ? `<span class="online-status">מחובר</span>` : `<span class="offline-status">נראה: ${user.lastSeen}</span>`;
+                        let imgPermText = user.canSendImages ? '🖼️ תמונות: מותר' : '🖼️ תמונות: חסום';
+                        let imgBtnColor = user.canSendImages ? '#4caf50' : '#777';
+
                         item.innerHTML = `
                             <span style="flex:1;"><strong>${user.nickname}</strong><br>${statusHtml}</span>
-                            <div style="display:flex; gap:2px;">
+                            <div style="display:flex; gap:2px; flex-wrap:wrap; justify-content:flex-end;">
+                                <button style="background:${imgBtnColor};color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;font-size:10px;" onclick="toggleImagePermissionConfirm('${user.id}', '${user.nickname}', ${user.canSendImages})">${imgPermText}</button>
                                 <button style="background:#0084ff;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="createPrivateChatWithUser('${user.nickname}')">צ'אט</button>
                                 <button style="background:#e53935;color:white;border:none;padding:3px 5px;border-radius:3px;cursor:pointer;" onclick="openBanModal('${user.id}')">חסום</button>
                             </div>
