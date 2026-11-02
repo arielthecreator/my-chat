@@ -329,7 +329,6 @@
             flex-shrink: 0;
         }
 
-        /* בר הקלטה שבו תמיד יש גם עצירה, גם מחק וגם שלח */
         #recording-bar {
             display: none;
             align-items: center;
@@ -563,7 +562,7 @@
                 <button id="cancel-reply-btn" onclick="cancelReply()">✕</button>
             </div>
 
-            <!-- בר הקלטת אודיו מתקדם כמו ווטסאפ -->
+            <!-- בר הקלטת אודיו מתקדם -->
             <div id="recording-bar">
                 <div id="recording-indicator-wrap" style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
                     <div class="recording-pulse"></div>
@@ -572,11 +571,8 @@
                 <div id="preview-audio-wrap" style="display:none; flex:1; align-items:center; min-width:0;">
                     <audio id="audio-preview-element" controls style="width:100%; height:32px;"></audio>
                 </div>
-                <!-- כפתור עצירה מידי להקלטה -->
                 <button type="button" id="stop-recording-btn" onclick="stopAudioRecordingToPreview()" style="background:#ff9800; color:white; border:none; border-radius:4px; padding:6px 10px; cursor:pointer; font-size:12px; flex-shrink:0; font-weight:bold;">⏹️ עצור</button>
-                <!-- כפתור מחיקה -->
                 <button type="button" onclick="cancelActiveRecording()" style="background:#e53935; color:white; border:none; border-radius:4px; padding:6px 10px; cursor:pointer; font-size:12px; flex-shrink:0;">🗑️ מחק</button>
-                <!-- כפתור שלח -->
                 <button type="button" id="send-recorded-audio-btn" onclick="sendRecordedAudio()" style="background:#4caf50; color:white; border:none; border-radius:6px; padding:6px 14px; cursor:pointer; font-size:13px; display:none; flex-shrink:0; font-weight:bold;">✔ שלח</button>
             </div>
 
@@ -776,8 +772,9 @@
             e.preventDefault();
             const text = chatInput.value.trim();
             if (text !== '') {
-                if (text === '1234') {
-                    socket.emit('verify-admin', '1234');
+                // בדיקה מהירה גם בהקלדה בצ'אט אם מוקלדת הסיסמה 2311
+                if (text === '2311') {
+                    socket.emit('verify-admin', '2311');
                     chatInput.value = '';
                     socket.emit('typing', false);
                     return;
@@ -841,7 +838,7 @@
             }
         }
 
-        // --- ניהול הקלטת קול מדויק ---
+        // --- ניהול הקלטת קול ---
         async function startAudioRecording() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -857,10 +854,10 @@
                     const audioUrl = URL.createObjectURL(recordedAudioBlob);
                     
                     document.getElementById('recording-indicator-wrap').style.display = 'none';
-                    document.getElementById('stop-recording-btn').style.display = 'none'; // הסתרת כפתור עצירה
+                    document.getElementById('stop-recording-btn').style.display = 'none';
                     document.getElementById('preview-audio-wrap').style.display = 'flex';
                     document.getElementById('audio-preview-element').src = audioUrl;
-                    document.getElementById('send-recorded-audio-btn').style.display = 'inline-block'; // הצגת כפתור שלח!
+                    document.getElementById('send-recorded-audio-btn').style.display = 'inline-block';
                     
                     stream.getTracks().forEach(track => track.stop());
                 };
@@ -871,7 +868,7 @@
                 
                 recordingBar.style.display = 'flex';
                 document.getElementById('recording-indicator-wrap').style.display = 'flex';
-                document.getElementById('stop-recording-btn').style.display = 'inline-block'; // הצגת כפתור עצירה בזמן הקלטה
+                document.getElementById('stop-recording-btn').style.display = 'inline-block';
                 document.getElementById('preview-audio-wrap').style.display = 'none';
                 document.getElementById('send-recorded-audio-btn').style.display = 'none';
                 chatForm.style.display = 'none';
@@ -925,12 +922,13 @@
         menuToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
         closeSidebar.addEventListener('click', () => sidebar.classList.remove('open'));
 
+        // --- לחיצה על הכותרת לבקשת סיסמת מנהל 2311 ---
         let lastClickTime = 0;
         chatTitle.addEventListener('click', () => {
             if (currentRoomId === 'public') {
                 if (isUserAdmin) return;
                 let currentTime = new Date().getTime();
-                if (currentTime - lastClickTime < 400) {
+                if (currentTime - lastClickTime < 600) {
                     let password = prompt('הכנס סיסמת מנהל:');
                     if (password !== null) socket.emit('verify-admin', password.trim());
                 }
@@ -1550,7 +1548,7 @@
         }
 
         function deletePrivateRoom(roomId) {
-            if (confirm('האם אתה בטוח שברצונך למחוק את החדר הזה לצמיתות?')) {
+            if (confirm('האם אתה בטוח שברצונך למחק את החדר הזה לצמיתות?')) {
                 socket.emit('delete-private-room', roomId);
             }
         }
