@@ -17,7 +17,10 @@ let messages = {
 let privateRooms = {};   
 let bannedUsers = {};    
 
-const ADMIN_PASSWORD = "1234";
+// סיסמת מנהל יחידה מעודכנת ל-2311
+const ADMIN_PASSWORD = "2311";
+// שומר את ה-socket.id של המנהל הפעיל היחיד במערכת
+let currentAdminSocketId = null;
 
 function updateAllData() {
     let allUsers = Object.keys(users).map(id => ({
@@ -73,14 +76,28 @@ io.on('connection', (socket) => {
         for (let id in users) {
             if (users[id].nickname === nickname) {
                 existingCanSendImages = users[id].canSendImages || false;
+                // אם המשתמש שהתנתק היה המנהל, ננקה את המשתנה
+                if (currentAdminSocketId === id) {
+                    currentAdminSocketId = null;
+                }
                 delete users[id];
             }
         }
         
+        // וידוא שאם מנסים להיכנס כמנהל אבל כבר יש מנהל פעיל אחר - זה לא אפשרי
+        let grantAdmin = isAdmin || false;
+        if (grantAdmin) {
+            if (currentAdminSocketId && currentAdminSocketId !== socket.id) {
+                grantAdmin = false; // כבר יש מנהל פעיל במערכת!
+            } else {
+                currentAdminSocketId = socket.id;
+            }
+        }
+
         users[socket.id] = {
             nickname: nickname,
-            isAdmin: isAdmin || false,
-            canSendImages: isAdmin ? true : existingCanSendImages,
+            isAdmin: grantAdmin,
+            canSendImages: grantAdmin ? true : existingCanSendImages,
             online: true,
             lastSeen: 'עכשיו'
         };
@@ -90,8 +107,21 @@ io.on('connection', (socket) => {
         updateAllData();
     });
 
+    // בדיקת סיסמת מנהל 2311 - מנהל יחיד בלבד!
     socket.on('verify-admin', (password) => {
         if (password === ADMIN_PASSWORD) {
+            // בדיקה האם כבר קיים מנהל פעיל אחר במערכת
+            if (currentAdminSocketId && currentAdminSocketId !== socket.id) {
+                // בדיקה האם המנהל הקודם התנתק או עדיין מחובר
+                if (io.sockets.sockets.get(currentAdminSocketId) && users[currentAdminSocketId] && users[currentAdminSocketId].online) {
+                    socket.emit('error-msg', 'כבר קיים מנהל פעיל במערכת!');
+                    socket.emit('admin-success', false);
+                    return;
+                }
+            }
+
+            // הגדרת המשתמש הנוכחי כמנהל היחיד
+            currentAdminSocketId = socket.id;
             if (users[socket.id]) {
                 users[socket.id].isAdmin = true;
                 users[socket.id].canSendImages = true;
@@ -492,6 +522,9 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log('משתמש התנתק:', socket.id);
+        if (currentAdminSocketId === socket.id) {
+            currentAdminSocketId = null; // אם המנהל התנתק, פנוי למנהל חדש
+        }
         if (users[socket.id]) {
             users[socket.id].online = false;
             users[socket.id].lastSeen = new Date().toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' });
