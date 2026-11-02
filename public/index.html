@@ -329,7 +329,7 @@
             flex-shrink: 0;
         }
 
-        /* בר הקלטה מתקדם עם כפתור שלח מפורש */
+        /* בר הקלטה שבו תמיד יש גם עצירה, גם מחק וגם שלח */
         #recording-bar {
             display: none;
             align-items: center;
@@ -563,7 +563,7 @@
                 <button id="cancel-reply-btn" onclick="cancelReply()">✕</button>
             </div>
 
-            <!-- בר הקלטת אודיו עם כפתורי מחיקה ושליחה ברורים בעברית -->
+            <!-- בר הקלטת אודיו מתקדם כמו ווטסאפ -->
             <div id="recording-bar">
                 <div id="recording-indicator-wrap" style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
                     <div class="recording-pulse"></div>
@@ -572,9 +572,12 @@
                 <div id="preview-audio-wrap" style="display:none; flex:1; align-items:center; min-width:0;">
                     <audio id="audio-preview-element" controls style="width:100%; height:32px;"></audio>
                 </div>
+                <!-- כפתור עצירה מידי להקלטה -->
+                <button type="button" id="stop-recording-btn" onclick="stopAudioRecordingToPreview()" style="background:#ff9800; color:white; border:none; border-radius:4px; padding:6px 10px; cursor:pointer; font-size:12px; flex-shrink:0; font-weight:bold;">⏹️ עצור</button>
+                <!-- כפתור מחיקה -->
                 <button type="button" onclick="cancelActiveRecording()" style="background:#e53935; color:white; border:none; border-radius:4px; padding:6px 10px; cursor:pointer; font-size:12px; flex-shrink:0;">🗑️ מחק</button>
-                <!-- כפתור שלח חדש, בולט ומפורש שמופיע מיד בהאזנה -->
-                <button type="button" id="send-recorded-audio-btn" onclick="sendRecordedAudio()" style="background:#4caf50; color:white; border:none; border-radius:6px; padding:6px 14px; cursor:pointer; font-size:13px; display:none; flex-shrink:0; font-weight:bold;">🚀 שלח הקלטה</button>
+                <!-- כפתור שלח -->
+                <button type="button" id="send-recorded-audio-btn" onclick="sendRecordedAudio()" style="background:#4caf50; color:white; border:none; border-radius:6px; padding:6px 14px; cursor:pointer; font-size:13px; display:none; flex-shrink:0; font-weight:bold;">✔ שלח</button>
             </div>
 
             <form id="chat-form">
@@ -582,7 +585,7 @@
                 <input type="file" id="gallery-file-input" accept="image/*" style="display:none;" onchange="handleImageSelected(event)">
                 
                 <button type="button" class="action-icon-btn" id="image-upload-btn" onclick="openImageOptions()" title="שלח תמונה">📷</button>
-                <button type="button" class="action-icon-btn" id="mic-btn" onclick="toggleAudioRecordingProcess()" title="הקלט הודעה קולית" style="display:inline-block;">🎙️</button>
+                <button type="button" class="action-icon-btn" id="mic-btn" onclick="startAudioRecording()" title="הקלט הודעה קולית" style="display:inline-block;">🎙️</button>
                 
                 <input type="text" id="chat-input" placeholder="כתוב הודעה..." autocomplete="off">
                 <button type="submit">שלח</button>
@@ -712,7 +715,6 @@
         let recordedAudioBlob = null;
         let recordingTimerInterval;
         let recordingSeconds = 0;
-        let recordingState = 'idle'; // 'idle', 'recording', 'preview'
 
         if (currentNickname) {
             loginScreen.style.display = 'none';
@@ -839,15 +841,7 @@
             }
         }
 
-        // --- ניהול מחזור ההקלטה: לחיצה 1 מתחילה הקלטה, לחיצה 2 עוצרת ומציגה את כפתור "שלח הקלטה" הענק ---
-        function toggleAudioRecordingProcess() {
-            if (recordingState === 'idle') {
-                startAudioRecording();
-            } else if (recordingState === 'recording') {
-                stopAudioRecordingToPreview();
-            }
-        }
-
+        // --- ניהול הקלטת קול מדויק ---
         async function startAudioRecording() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -863,21 +857,21 @@
                     const audioUrl = URL.createObjectURL(recordedAudioBlob);
                     
                     document.getElementById('recording-indicator-wrap').style.display = 'none';
+                    document.getElementById('stop-recording-btn').style.display = 'none'; // הסתרת כפתור עצירה
                     document.getElementById('preview-audio-wrap').style.display = 'flex';
                     document.getElementById('audio-preview-element').src = audioUrl;
-                    
-                    // מציגים במפורש את כפתור השליחה הענק!
-                    document.getElementById('send-recorded-audio-btn').style.display = 'inline-block';
+                    document.getElementById('send-recorded-audio-btn').style.display = 'inline-block'; // הצגת כפתור שלח!
                     
                     stream.getTracks().forEach(track => track.stop());
                 };
 
                 mediaRecorder.start();
-                recordingState = 'recording';
                 recordingSeconds = 0;
                 document.getElementById('recording-timer').innerText = "00:00";
+                
                 recordingBar.style.display = 'flex';
                 document.getElementById('recording-indicator-wrap').style.display = 'flex';
+                document.getElementById('stop-recording-btn').style.display = 'inline-block'; // הצגת כפתור עצירה בזמן הקלטה
                 document.getElementById('preview-audio-wrap').style.display = 'none';
                 document.getElementById('send-recorded-audio-btn').style.display = 'none';
                 chatForm.style.display = 'none';
@@ -889,10 +883,6 @@
                     document.getElementById('recording-timer').innerText = `${mins}:${secs}`;
                 }, 1000);
 
-                const micBtn = document.getElementById('mic-btn');
-                micBtn.innerText = "⏹️"; 
-                micBtn.style.color = "red";
-
             } catch (err) {
                 alert('אין גישה למיקרופון או שהמכשיר אינו תומך בהקלטה.');
             }
@@ -903,10 +893,6 @@
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
             }
-            recordingState = 'preview';
-            const micBtn = document.getElementById('mic-btn');
-            micBtn.innerText = "🎙️";
-            micBtn.style.color = "black";
         }
 
         function cancelActiveRecording() {
@@ -915,12 +901,8 @@
                 mediaRecorder.stop();
             }
             recordedAudioBlob = null;
-            recordingState = 'idle';
             recordingBar.style.display = 'none';
             chatForm.style.display = 'flex';
-            const micBtn = document.getElementById('mic-btn');
-            micBtn.innerText = "🎙️";
-            micBtn.style.color = "black";
         }
 
         function sendRecordedAudio() {
