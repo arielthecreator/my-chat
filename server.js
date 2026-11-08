@@ -21,15 +21,6 @@ const ADMIN_PASSWORD = "2311";
 let currentAdminSocketId = null;
 
 function updateAllData() {
-    // מנקים אוטומטית מהרשימה משתמשים שלא מחוברים יותר כדי שלא יהיו כפילויות
-    let activeUsers = {};
-    for (let id in users) {
-        if (users[id].online) {
-            activeUsers[id] = users[id];
-        }
-    }
-    users = activeUsers; // שומרים רק את מי שמחובר באמת
-
     let allUsers = Object.keys(users).map(id => ({
         id: id,
         nickname: users[id].nickname,
@@ -76,6 +67,7 @@ io.on('connection', (socket) => {
         return;
     }
 
+    // חיבור משתמש - שומר אותו ברשימה לפי ה-socket.id שלו כדי לא לדרוס אחרים עם אותו שם
     socket.on('join', (data) => {
         let { nickname, isAdmin } = data;
         nickname = nickname ? nickname.trim() : 'אורח';
@@ -90,6 +82,7 @@ io.on('connection', (socket) => {
         }
 
         users[socket.id] = {
+            id: socket.id,
             nickname: nickname,
             isAdmin: grantAdmin,
             canSendImages: grantAdmin ? true : false,
@@ -161,7 +154,7 @@ io.on('connection', (socket) => {
 
         let targetSocketId = null;
         for (let id in users) {
-            if (users[id].nickname === targetNickname && users[id].online) {
+            if (users[id].nickname === targetNickname) {
                 targetSocketId = id;
                 break;
             }
@@ -198,7 +191,7 @@ io.on('connection', (socket) => {
         socket.join(roomId);
         members.forEach(nick => {
             for (let id in users) {
-                if (users[id].nickname === nick && users[id].online) {
+                if (users[id].nickname === nick) {
                     let s = io.sockets.sockets.get(id);
                     if (s) s.join(roomId);
                 }
@@ -257,7 +250,7 @@ io.on('connection', (socket) => {
             if (!room.members.includes(nick)) {
                 room.members.push(nick);
                 for (let id in users) {
-                    if (users[id].nickname === nick && users[id].online) {
+                    if (users[id].nickname === nick) {
                         let s = io.sockets.sockets.get(id);
                         if (s) s.join(roomId);
                     }
@@ -478,8 +471,11 @@ io.on('connection', (socket) => {
         if (currentAdminSocketId === socket.id) {
             currentAdminSocketId = null;
         }
-        // ברגע שהמשתמש מתנתק, מסירים אותו לגמרי מהרשימה כדי שלא יישאר כפילויות
-        delete users[socket.id];
+        // מעדכנים סטטוס ללא מחיקה מהרשימה כדי שכולם יישארו גלויים ברשימת המשתמשים
+        if (users[socket.id]) {
+            users[socket.id].online = false;
+            users[socket.id].lastSeen = new Date().toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' });
+        }
         updateAllData();
     });
 });
