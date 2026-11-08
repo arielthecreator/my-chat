@@ -1,14 +1,14 @@
-const express = require('express');
+const express = require('http');
 const http = require('http');
 const { Server } = require('socket.io');
 
-const app = express();
+const app = require('express')();
 const server = http.createServer(app);
 const io = new Server(server, {
     maxHttpBufferSize: 15 * 1024 * 1024 // הגדלת נפח להעברת תמונות ואודיו
 });
 
-app.use(express.static('public'));
+app.use(require('express').static('public'));
 
 let users = {};          
 let messages = {         
@@ -17,9 +17,7 @@ let messages = {
 let privateRooms = {};   
 let bannedUsers = {};    
 
-// סיסמת מנהל יחידה מעודכנת ל-2311
 const ADMIN_PASSWORD = "2311";
-// שומר את ה-socket.id של המנהל הפעיל היחיד במערכת
 let currentAdminSocketId = null;
 
 function updateAllData() {
@@ -70,25 +68,33 @@ io.on('connection', (socket) => {
     }
 
     socket.on('join', (data) => {
-        const { nickname, isAdmin } = data;
-        
-        let existingCanSendImages = false;
+        let { nickname, isAdmin } = data;
+        nickname = nickname ? nickname.trim() : 'אורח';
+
+        // בדיקה האם הכינוי כבר תפוס על ידי משתמש מחובר אחר
+        let nameExists = false;
         for (let id in users) {
-            if (users[id].nickname === nickname) {
-                existingCanSendImages = users[id].canSendImages || false;
-                // אם המשתמש שהתנתק היה המנהל, ננקה את המשתנה
-                if (currentAdminSocketId === id) {
-                    currentAdminSocketId = null;
-                }
-                delete users[id];
+            if (users[id].nickname === nickname && id !== socket.id) {
+                nameExists = true;
+                break;
             }
         }
-        
-        // וידוא שאם מנסים להיכנס כמנהל אבל כבר יש מנהל פעיל אחר - זה לא אפשרי
+
+        // אם הככינוי תפוס, ניתן לו מספר ייחודי מאחוריו כדי שלא יידרסו
+        if (nameExists) {
+            let counter = 2;
+            let newNick = `${nickname}_${counter}`;
+            while (Object.values(users).some(u => u.nickname === newNick)) {
+                counter++;
+                newNick = `${nickname}_${counter}`;
+            }
+            nickname = newNick;
+        }
+
         let grantAdmin = isAdmin || false;
         if (grantAdmin) {
             if (currentAdminSocketId && currentAdminSocketId !== socket.id) {
-                grantAdmin = false; // כבר יש מנהל פעיל במערכת!
+                grantAdmin = false;
             } else {
                 currentAdminSocketId = socket.id;
             }
@@ -97,7 +103,7 @@ io.on('connection', (socket) => {
         users[socket.id] = {
             nickname: nickname,
             isAdmin: grantAdmin,
-            canSendImages: grantAdmin ? true : existingCanSendImages,
+            canSendImages: grantAdmin ? true : false,
             online: true,
             lastSeen: 'עכשיו'
         };
@@ -107,12 +113,9 @@ io.on('connection', (socket) => {
         updateAllData();
     });
 
-    // בדיקת סיסמת מנהל 2311 - מנהל יחיד בלבד!
     socket.on('verify-admin', (password) => {
         if (password === ADMIN_PASSWORD) {
-            // בדיקה האם כבר קיים מנהל פעיל אחר במערכת
             if (currentAdminSocketId && currentAdminSocketId !== socket.id) {
-                // בדיקה האם המנהל הקודם התנתק או עדיין מחובר
                 if (io.sockets.sockets.get(currentAdminSocketId) && users[currentAdminSocketId] && users[currentAdminSocketId].online) {
                     socket.emit('error-msg', 'כבר קיים מנהל פעיל במערכת!');
                     socket.emit('admin-success', false);
@@ -120,7 +123,6 @@ io.on('connection', (socket) => {
                 }
             }
 
-            // הגדרת המשתמש הנוכחי כמנהל היחיד
             currentAdminSocketId = socket.id;
             if (users[socket.id]) {
                 users[socket.id].isAdmin = true;
@@ -523,7 +525,7 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log('משתמש התנתק:', socket.id);
         if (currentAdminSocketId === socket.id) {
-            currentAdminSocketId = null; // אם המנהל התנתק, פנוי למנהל חדש
+            currentAdminSocketId = null;
         }
         if (users[socket.id]) {
             users[socket.id].online = false;
