@@ -1,14 +1,14 @@
-const express = require('http');
+const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 
-const app = require('express')();
+const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     maxHttpBufferSize: 15 * 1024 * 1024 // הגדלת נפח להעברת תמונות ואודיו
 });
 
-app.use(require('express').static('public'));
+app.use(express.static('public'));
 
 let users = {};          
 let messages = {         
@@ -21,6 +21,15 @@ const ADMIN_PASSWORD = "2311";
 let currentAdminSocketId = null;
 
 function updateAllData() {
+    // מנקים אוטומטית מהרשימה משתמשים שלא מחוברים יותר כדי שלא יהיו כפילויות
+    let activeUsers = {};
+    for (let id in users) {
+        if (users[id].online) {
+            activeUsers[id] = users[id];
+        }
+    }
+    users = activeUsers; // שומרים רק את מי שמחובר באמת
+
     let allUsers = Object.keys(users).map(id => ({
         id: id,
         nickname: users[id].nickname,
@@ -70,26 +79,6 @@ io.on('connection', (socket) => {
     socket.on('join', (data) => {
         let { nickname, isAdmin } = data;
         nickname = nickname ? nickname.trim() : 'אורח';
-
-        // בדיקה האם הכינוי כבר תפוס על ידי משתמש מחובר אחר
-        let nameExists = false;
-        for (let id in users) {
-            if (users[id].nickname === nickname && id !== socket.id) {
-                nameExists = true;
-                break;
-            }
-        }
-
-        // אם הככינוי תפוס, ניתן לו מספר ייחודי מאחוריו כדי שלא יידרסו
-        if (nameExists) {
-            let counter = 2;
-            let newNick = `${nickname}_${counter}`;
-            while (Object.values(users).some(u => u.nickname === newNick)) {
-                counter++;
-                newNick = `${nickname}_${counter}`;
-            }
-            nickname = newNick;
-        }
 
         let grantAdmin = isAdmin || false;
         if (grantAdmin) {
@@ -161,31 +150,6 @@ io.on('connection', (socket) => {
         const { roomName, targetNickname } = data;
         const creatorNick = users[socket.id] ? users[socket.id].nickname : 'אורח';
         
-        let existingRoomId = null;
-        for (let rId in privateRooms) {
-            let members = privateRooms[rId].members;
-            if (members && members.includes(creatorNick) && members.includes(targetNickname) && members.length === 2) {
-                existingRoomId = rId;
-                break;
-            }
-        }
-
-        if (existingRoomId) {
-            let targetSocketId = null;
-            for (let id in users) {
-                if (users[id].nickname === targetNickname) {
-                    targetSocketId = id;
-                    break;
-                }
-            }
-            socket.join(existingRoomId);
-            if (targetSocketId && io.sockets.sockets.get(targetSocketId)) {
-                io.sockets.sockets.get(targetSocketId).join(existingRoomId);
-            }
-            socket.emit('room-created', existingRoomId);
-            return;
-        }
-
         let roomId = 'room_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
         privateRooms[roomId] = {
             name: roomName,
@@ -197,7 +161,7 @@ io.on('connection', (socket) => {
 
         let targetSocketId = null;
         for (let id in users) {
-            if (users[id].nickname === targetNickname) {
+            if (users[id].nickname === targetNickname && users[id].online) {
                 targetSocketId = id;
                 break;
             }
@@ -234,7 +198,7 @@ io.on('connection', (socket) => {
         socket.join(roomId);
         members.forEach(nick => {
             for (let id in users) {
-                if (users[id].nickname === nick) {
+                if (users[id].nickname === nick && users[id].online) {
                     let s = io.sockets.sockets.get(id);
                     if (s) s.join(roomId);
                 }
@@ -293,7 +257,7 @@ io.on('connection', (socket) => {
             if (!room.members.includes(nick)) {
                 room.members.push(nick);
                 for (let id in users) {
-                    if (users[id].nickname === nick) {
+                    if (users[id].nickname === nick && users[id].online) {
                         let s = io.sockets.sockets.get(id);
                         if (s) s.join(roomId);
                     }
@@ -400,19 +364,6 @@ io.on('connection', (socket) => {
         messages[currentRoom].push(newMessage);
 
         io.to(currentRoom).emit('new-message', newMessage);
-
-        if (currentRoom !== 'public' && privateRooms[currentRoom]) {
-            let roomMembers = privateRooms[currentRoom].members;
-            roomMembers.forEach(memberNick => {
-                if (memberNick !== nickname) {
-                    for (let id in users) {
-                        if (users[id].nickname === memberNick) {
-                            io.to(id).emit('room-notification', { roomId: currentRoom, roomName: privateRooms[currentRoom].name, sender: nickname });
-                        }
-                    }
-                }
-            });
-        }
     });
 
     socket.on('mark-as-read', () => {
@@ -527,10 +478,8 @@ io.on('connection', (socket) => {
         if (currentAdminSocketId === socket.id) {
             currentAdminSocketId = null;
         }
-        if (users[socket.id]) {
-            users[socket.id].online = false;
-            users[socket.id].lastSeen = new Date().toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' });
-        }
+        // ברגע שהמשתמש מתנתק, מסירים אותו לגמרי מהרשימה כדי שלא יישאר כפילויות
+        delete users[socket.id];
         updateAllData();
     });
 });
