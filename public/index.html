@@ -668,6 +668,23 @@
     <script>
         const socket = io();
 
+        // --- רישום Service Worker להתראות דחיפה אמיתיות ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => {
+                        console.log('Service Worker registered!', reg);
+                        // בקשת הרשאת התראות מהמשתמש
+                        Notification.requestPermission().then(permission => {
+                            if (permission === 'granted') {
+                                console.log('Notification permission granted.');
+                            }
+                        });
+                    })
+                    .catch(err => console.log('Service Worker registration failed:', err));
+            });
+        }
+
         const loginScreen = document.getElementById('login-screen');
         const chatScreen = document.getElementById('chat-screen');
         const nicknameInput = document.getElementById('nickname-input');
