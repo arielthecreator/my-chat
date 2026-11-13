@@ -357,6 +357,9 @@ io.on('connection', (socket) => {
         messages[currentRoom].push(newMessage);
 
         io.to(currentRoom).emit('new-message', newMessage);
+
+        // שליחת התראה לחדרים האחרים או למשתמשים כאשר הודעה חדשה נשלחת ברקע
+        socket.to(currentRoom).emit('room-notification', { roomId: currentRoom });
     });
 
     socket.on('mark-as-read', () => {
