@@ -1419,6 +1419,34 @@
             updateSidebarUI();
         });
 
+        function formatLastSeen(lastSeenValue) {
+            if (!lastSeenValue) return 'לא ידוע';
+            if (typeof lastSeenValue === 'string') return lastSeenValue;
+
+            const lastDate = new Date(lastSeenValue);
+            const now = new Date();
+
+            const timeStr = lastDate.toLocaleTimeString('he-IL', {
+                timeZone: 'Asia/Jerusalem',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const lastDayStart = new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate());
+            const diffDays = Math.round((todayStart - lastDayStart) / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 0) {
+                return timeStr;
+            } else if (diffDays === 1) {
+                return `אתמול ב-${timeStr}`;
+            } else {
+                const day = lastDate.getDate().toString().padStart(2, '0');
+                const month = (lastDate.getMonth() + 1).toString().padStart(2, '0');
+                return `ביום ${day}/${month} ב-${timeStr}`;
+            }
+        }
+
         function updateSidebarUI() {
             sidebarContent.innerHTML = '';
 
@@ -1462,7 +1490,7 @@
                     if (user.nickname !== currentNickname) {
                         const item = document.createElement('div');
                         item.className = 'user-mgmt-item';
-                        let statusHtml = user.online ? `<span class="online-status">מחובר</span>` : `<span class="offline-status">נראה: ${user.lastSeen}</span>`;
+                        let statusHtml = user.online ? `<span class="online-status">מחובר</span>` : `<span class="offline-status">נראה: ${formatLastSeen(user.lastSeen)}</span>`;
                         let imgPermText = user.canSendImages ? '🖼️ תמונות: מותר' : '🖼️ תמונות: חסום';
                         let imgBtnColor = user.canSendImages ? '#4caf50' : '#777';
 
@@ -1511,7 +1539,7 @@
                     if (user.nickname !== currentNickname) {
                         const item = document.createElement('div');
                         item.className = 'user-mgmt-item';
-                        let statusHtml = user.online ? `<span class="online-status">מחובר כעת</span>` : `<span class="offline-status">התחבר ב-${user.lastSeen}</span>`;
+                        let statusHtml = user.online ? `<span class="online-status">מחובר כעת</span>` : `<span class="offline-status">התחבר ב-${formatLastSeen(user.lastSeen)}</span>`;
                         item.innerHTML = `
                             <span style="flex:1;"><strong>${user.nickname}</strong><br>${statusHtml}</span>
                             <button style="background:#0084ff;color:white;border:none;padding:4px 8px;border-radius:3px;cursor:pointer;font-weight:bold;" onclick="createPrivateChatWithUser('${user.nickname}')">💬 צ'אט</button>
