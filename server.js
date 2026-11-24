@@ -477,7 +477,7 @@ io.on('connection', (socket) => {
         // מעדכנים סטטוס ללא מחיקה מהרשימה כדי שכולם יישארו גלויים ברשימת המשתמשים
         if (users[socket.id]) {
             users[socket.id].online = false;
-            users[socket.id].lastSeen = new Date().toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' });
+            users[socket.id].lastSeen = Date.now();
         }
         updateAllData();
     });
